@@ -77,8 +77,8 @@ class Runner(object):
         )
         p.add_argument('-l', '--log-disable', action='store_true',
                        default=False, dest='log_disable',
-                       help='If specified, disable ALL logging. This can be '
-                            'changed at runtime via signals.')
+                       help='If specified, disable ALL logging after initial '
+                            'setup. This can be changed at runtime via signals')
         p.add_argument('-V', '--version', action='version', version=ver_str)
         p.add_argument('-S', '--https', dest='https', action='store_true',
                        default=False, help='Redirect to HTTPS scheme instead '
@@ -86,6 +86,16 @@ class Runner(object):
         p.add_argument('-I', '--ip', dest='redir_ip',
                        action='store_true', default=False,
                        help='redirect to active node IP instead of name')
+        p.add_argument('-p', '--poll-interval', dest='poll_interval',
+                       default=5.0, action='store', type=float,
+                       help='Consul service health poll interval in seconds'
+                            ' (default 5.0)')
+        p.add_argument('-P', '--port', dest='bind_port', action='store',
+                       type=int, default=8080,
+                       help='Port number to listen on (default 8080)')
+        p.add_argument('-c', '--checkid', dest='checkid', action='store',
+                       type=str, default='service:vault', help='Consul service '
+                       'CheckID for Vault (default: "service:vault"')
         p.add_argument('CONSUL_HOST_PORT', action='store', type=str,
                        help='Consul address in host:port form')
         args = p.parse_args(argv)
@@ -109,22 +119,26 @@ class Runner(object):
             args.CONSUL_HOST_PORT,
             redir_to_https=args.https,
             redir_to_ip=args.redir_ip,
-            log_disable=args.log_disable
+            log_disable=args.log_disable,
+            poll_interval=args.poll_interval,
+            bind_port=args.bind_port,
+            check_id=args.checkid
         )
         redir.run()
 
 
 def set_log_info():
     """set logger level to INFO"""
-    set_log_level_format(logging.INFO, '%(levelname)s:%(name)s:%(message)s')
+    set_log_level_format(logging.INFO,
+                         '%(asctime)s %(levelname)s:%(name)s:%(message)s')
 
 
 def set_log_debug():
     """set logger level to DEBUG, and debug-level output format"""
     set_log_level_format(
         logging.DEBUG,
-        "[%(levelname)s %(filename)s:%(lineno)s - %(name)s.%(funcName)s() ]"
-        " %(message)s"
+        "%(asctime)s [%(levelname)s %(filename)s:%(lineno)s - "
+        "%(name)s.%(funcName)s() ] %(message)s"
     )
 
 

@@ -39,6 +39,12 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 import logging
 import signal
 from os import getpid
+import requests
+from twisted.web import server, resource
+from twisted.internet import reactor
+from twisted.internet import task
+from twisted.web._responses import NOT_FOUND, SERVICE_UNAVAILABLE
+from vault_redirector.version import _VERSION
 
 logger = logging.getLogger()
 
@@ -46,7 +52,8 @@ logger = logging.getLogger()
 class VaultRedirector(object):
 
     def __init__(self, consul_host_port,
-                 redir_to_https=False, redir_to_ip=False, log_disable=False):
+                 redir_to_https=False, redir_to_ip=False, log_disable=False,
+                 poll_interval=5.0, bind_port=8080, check_id='service:vault'):
         """
         Initialize the redirector service.
 
@@ -57,14 +64,27 @@ class VaultRedirector(object):
         :param redir_to_ip: Redirect to IP if True, otherwise node name
         :type redir_to_ip: bool
         :param log_disable: If True, do not fire ANY :py:mod:`logging` module
-          calls from this class; ignore them all. This can be changed at runtime
-          via signals.
+          calls from this class after initial setup; ignore them all. This can
+          be changed at runtime via signals.
         :type log_disable: bool
+        :param poll_interval: interval in seconds to poll Consul service health
+        :type poll_interval: float
+        :param bind_port: port number to bind to / listen on
+        :type bind_port: int
+        :param check_id: Consul health check ID to use for Vault
+        :type check_id: str
         """
+        self.active_node_ip_port = None
         self.consul_host_port = consul_host_port
         self.redir_https = redir_to_https
+        self.consul_scheme = 'http'
+        if self.redir_https:
+            self.consul_scheme = 'https'
         self.redir_ip = redir_to_ip
         self.log_enabled = not log_disable
+        self.poll_interval = poll_interval
+        self.bind_port = bind_port
+        self.check_id = check_id
         # setup signal handlers for logging enable/disable
         self.setup_signal_handlers()
         if not self.log_enabled:
@@ -101,5 +121,164 @@ class VaultRedirector(object):
             self.log_enabled = False
         # else don't know how we got here, but ignore it
 
+    def get_active_node(self):
+        """
+        GET the Consul URL for the 'vault' service health check, parse the JSON
+        reply, and return either the active node in (name|ip):port form, or
+        None if no active node can be found.
+
+        :return: active node in (name|ip):port form or None
+        :rtype: str or None
+        """
+        url = 'http://%s/v1/health/service/vault' % self.consul_host_port
+        # parse the health check results and find the one that's passing
+        if self.log_enabled:
+            logger.debug('Polling active node from: %s', url)
+        r = requests.get(url)
+        # return the current leader address
+        for node in r.json():
+            for check in node['Checks']:
+                if check['CheckID'] != self.check_id:
+                    continue
+                if check['Status'] != 'passing':
+                    continue
+                port = node['Service']['Port']
+                n = "%s:%d" % (node['Node']['Node'], port)
+                if self.redir_ip:
+                    n = "%s:%d" % (node['Node']['Address'], port)
+                if self.log_enabled:
+                    logger.info("Got active node as: %s", n)
+                return n
+        if self.log_enabled:
+            logger.critical('NO vault services found with health check passing')
+        return None
+
+    def update_active_node(self):
+        try:
+            newnode = self.get_active_node()
+        except Exception:
+            logger.exception('Exception encountered when polling active node')
+            # we have a choice here whether to keep serving the old active
+            # node, or start serving 503s. Might as well serve the old one, in
+            # case the error is with Consul or intermittent. If the node is
+            # really down, the client will end up with an error anyway...
+            newnode = None
+        if self.log_enabled and newnode != self.active_node_ip_port:
+            logger.warning("Active vault node changed from %s to %s",
+                           self.active_node_ip_port, newnode)
+        self.active_node_ip_port = newnode
+
     def run(self):
-        pass
+        """setup the site, start listening on port, setup the looping call to
+        :py:meth:`~.update_active_node` every ``self.poll_interval`` seconds,
+        and start the Twisted reactor"""
+        # get the active node before we start anything...
+        self.active_node_ip_port = self.get_active_node()
+        if self.active_node_ip_port is None:
+            logger.critical("ERROR: Could not get active vault node from "
+                            "Consul. Exiting.")
+            raise SystemExit(3)
+        logger.warning("Initial Vault active node: %s",
+                       self.active_node_ip_port)
+        site = server.Site(VaultRedirectorSite(self))
+        # setup our HTTP listener
+        logger.warning('Setting TCP listener on port %d for HTTP requests',
+                       self.bind_port)
+        reactor.listenTCP(self.bind_port, site)
+        # setup the update_active_node poll every POLL_INTERVAL seconds
+        l = task.LoopingCall(self.update_active_node)
+        logger.warning('Setting Consul poll interval to %s seconds',
+                       self.poll_interval)
+        l.start(self.poll_interval)
+        logger.warning('Starting Twisted reactor (event loop)')
+        reactor.run()
+
+
+class VaultRedirectorSite(object):
+    """
+    Unfortunately :py:class:`twisted.web.resource.Resource` is an old-style
+    class, so we can't easily subclass it and override its ``__init__``. So,
+    we implement the :py:class:`twisted.web.resource.IResource` interface
+    ourselves.
+    """
+
+    isLeaf = True
+
+    def __init__(self, redirector):
+        """
+
+        :param redirector: VaultRedirector instance
+        :type redirector: :py:class:`~.VaultRedirector` instance
+        """
+        self.redirector = redirector
+
+    def getChildWithDefault(self, name, request):
+        """
+        This should never be called; it's simply required to implement the
+        :py:class:`twisted.web.resource.IResource` interface. Just returns
+        a 404.
+
+        See: :py:meth:`twisted.web.resource.IResource.getChildWithDefault`
+        """
+        return resource.ErrorPage(NOT_FOUND, "No Such Resource",
+                                  "No Such Resource")
+
+    def render(self, request):
+        """
+        Render the response to the given request. This simply gets the current
+        active vault node from ``self.redirector`` (our instance of
+        :py:class:`~.VaultRedirector`) and returns a 307 Temporary Redirect
+        to the same path as the request, on that active node.
+
+        The ``request`` param is an instance of
+        :py:class:`twisted.web.server.Request`, which implements
+        :py:class:`twisted.web.iweb.IRequest` and inherits from
+        :py:class:`twisted.web.http.Request`
+
+        The return value is meaningless. We simply set a response code and
+        headers on the ``request`` parameter.
+
+        If we were unable to retrieve the current active Vault node from the
+        Consul API, return a 503 error response. This is the same code that
+        Vault uses when it is down for maintenance or sealed.
+
+        :param request: incoming HTTP request
+        :type request: :py:class:`twisted.web.server.Request`
+        :return: empty string (None)
+        :rtype: str
+        """
+        path = request.uri
+        twisted_server = request.responseHeaders.getRawHeaders(
+            'server', 'Twisted'
+        )[0]
+        request.setHeader('server',
+                          'vault-redirector/%s/%s' % (_VERSION, twisted_server))
+        if self.redirector.active_node_ip_port is None:
+            if self.redirector.log_enabled:
+                queued = ''
+                if request.queued:
+                    queued = 'QUEUED '
+                logger.warning('RESPOND 503 for %s%s request for %s from %s:%s',
+                               queued, request.method, path,
+                               request.client.host, request.client.port)
+            return resource.ErrorPage(
+                SERVICE_UNAVAILABLE,
+                "No Active Node",
+                "No active Vault leader could be determined from Consul API"
+            )
+        redir_to = '%s://%s%s' % (
+            self.redirector.consul_scheme,
+            self.redirector.active_node_ip_port,
+            path
+        )
+        if self.redirector.log_enabled:
+            queued = ''
+            if request.queued:
+                queued = 'QUEUED '
+            logger.info('RESPOND 307 to %s for %s%s request for %s from %s:%s',
+                        redir_to, queued, request.method, path,
+                        request.client.host, request.client.port)
+        request.setResponseCode(307)
+        request.setHeader("Location", redir_to)
+        request.setHeader("Content-Type", "text/html; charset=UTF-8")
+        return ""

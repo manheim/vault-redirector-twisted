@@ -7,6 +7,7 @@ with open('README.rst') as file:
 
 requires = [
     'requests',
+    'twisted>=16.0.0'
 ]
 
 classifiers = [

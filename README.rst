@@ -88,10 +88,11 @@ Python's logging framework can impose a slight performance penalty even for mess
 which are below the level set to be displayed (simple testing reports 10x execution
 time for logging to a level below what's set, vs guarding the log statements with
 a conditional). As a result, in addition to Python's normal logging verbosity
-levels, all logging statements are guarded by a global "logging enabled" boolean;
-if logging is not enabled, the calls to Python's logging framework will never be
-made. This behavior can be enabled by running the process with the ``-l`` or
- ``--log-disable`` options (which is the recommended production configuration).
+levels, all logging statements after initial setup are guarded by a global
+"logging enabled" boolean; if logging is not enabled, the calls to Python's
+logging framework will never be made. This behavior can be enabled by running
+the process with the ``-l`` or ``--log-disable`` options (which is the
+recommended production configuration).
 
 Note that this functionality is completely separate from the logging module's
 levels, which are controlled by the ``-v`` / ``-vv`` options (and are not currently

@@ -95,8 +95,9 @@ class TestRunner(object):
                                 'debug-level output. See also -l|--log-enable'),
             call().add_argument('-l', '--log-disable', action='store_true',
                                 default=False, dest='log_disable',
-                                help='If specified, disable ALL logging. This '
-                                     'can be changed at runtime via signals.'),
+                                help='If specified, disable ALL logging after '
+                                     'initial setup. This can be changed at '
+                                     'runtime via signals'),
             call().add_argument('-V', '--version', action='version',
                                 version=ver_str),
             call().add_argument('-S', '--https', dest='https',
@@ -107,6 +108,17 @@ class TestRunner(object):
                                 action='store_true', default=False,
                                 help='redirect to active node IP instead of '
                                 'name'),
+            call().add_argument('-p', '--poll-interval', dest='poll_interval',
+                                default=5.0, action='store', type=float,
+                                help='Consul service health poll interval in '
+                                     'seconds (default 5.0)'),
+            call().add_argument('-P', '--port', dest='bind_port',
+                                action='store', type=int, default=8080,
+                                help='Port number to listen on (default 8080)'),
+            call().add_argument('-c', '--checkid', dest='checkid',
+                                action='store', type=str,
+                                default='service:vault', help='Consul service '
+                                'CheckID for Vault (default: "service:vault"'),
             call().add_argument('CONSUL_HOST_PORT', action='store', type=str,
                                 help='Consul address in host:port form'),
             call().parse_args(['foo:123']),
@@ -144,6 +156,18 @@ class TestRunner(object):
         res = self.cls.parse_args(['-I', 'foo:123'])
         assert res.redir_ip is True
 
+    def test_parse_args_poll_interval(self):
+        res = self.cls.parse_args(['-p', '1.23', 'foo:123'])
+        assert res.poll_interval == 1.23
+
+    def test_parse_args_port(self):
+        res = self.cls.parse_args(['-P', '1234', 'foo:123'])
+        assert res.bind_port == 1234
+
+    def test_parse_args_checkid(self):
+        res = self.cls.parse_args(['-c', 'foo:bar', 'foo:123'])
+        assert res.checkid == 'foo:bar'
+
     def test_parse_args_no_options(self):
         res = self.cls.parse_args(['foo:123'])
         assert res.CONSUL_HOST_PORT == 'foo:123'
@@ -152,6 +176,9 @@ class TestRunner(object):
         assert res.https is False
         assert res.redir_ip is False
         assert res.log_disable is False
+        assert res.poll_interval == 5.0
+        assert res.bind_port == 8080
+        assert res.checkid == 'service:vault'
 
     def test_parse_args_none(self):
         with pytest.raises(SystemExit):
@@ -177,7 +204,8 @@ class TestRunner(object):
         assert mock_redir.mock_calls == [
             call(
                 'foo:123', redir_to_https=False, redir_to_ip=False,
-                log_disable=False
+                log_disable=False, poll_interval=5.0, bind_port=8080,
+                check_id='service:vault'
             ),
             call().run()
         ]
@@ -195,7 +223,8 @@ class TestRunner(object):
         assert mock_redir.mock_calls == [
             call(
                 'foo:123', redir_to_https=True, redir_to_ip=False,
-                log_disable=False
+                log_disable=False, poll_interval=5.0, bind_port=8080,
+                check_id='service:vault'
             ),
             call().run()
         ]
@@ -213,7 +242,65 @@ class TestRunner(object):
         assert mock_redir.mock_calls == [
             call(
                 'foo:123', redir_to_https=False, redir_to_ip=True,
-                log_disable=False
+                log_disable=False, poll_interval=5.0, bind_port=8080,
+                check_id='service:vault'
+            ),
+            call().run()
+        ]
+        assert mock_logger.mock_calls == []
+
+    def test_console_entry_point_poll_interval(self):
+        argv = ['/tmp/redirector/runner.py', '-p', '12.345', 'foo:123']
+        with patch.object(sys, 'argv', argv):
+            with patch(
+                    '%s.VaultRedirector' % pbm,
+                    spec_set=VaultRedirector
+            ) as mock_redir, \
+                 patch('%s.logger' % pbm) as mock_logger:
+                self.cls.console_entry_point()
+        assert mock_redir.mock_calls == [
+            call(
+                'foo:123', redir_to_https=False, redir_to_ip=False,
+                log_disable=False, poll_interval=12.345, bind_port=8080,
+                check_id='service:vault'
+            ),
+            call().run()
+        ]
+        assert mock_logger.mock_calls == []
+
+    def test_console_entry_port(self):
+        argv = ['/tmp/redirector/runner.py', '-P', '1234', 'foo:123']
+        with patch.object(sys, 'argv', argv):
+            with patch(
+                    '%s.VaultRedirector' % pbm,
+                    spec_set=VaultRedirector
+            ) as mock_redir, \
+                 patch('%s.logger' % pbm) as mock_logger:
+                self.cls.console_entry_point()
+        assert mock_redir.mock_calls == [
+            call(
+                'foo:123', redir_to_https=False, redir_to_ip=False,
+                log_disable=False, poll_interval=5.0, bind_port=1234,
+                check_id='service:vault'
+            ),
+            call().run()
+        ]
+        assert mock_logger.mock_calls == []
+
+    def test_console_entry_checkid(self):
+        argv = ['/tmp/redirector/runner.py', '-c', 'foo:bar', 'foo:123']
+        with patch.object(sys, 'argv', argv):
+            with patch(
+                    '%s.VaultRedirector' % pbm,
+                    spec_set=VaultRedirector
+            ) as mock_redir, \
+                 patch('%s.logger' % pbm) as mock_logger:
+                self.cls.console_entry_point()
+        assert mock_redir.mock_calls == [
+            call(
+                'foo:123', redir_to_https=False, redir_to_ip=False,
+                log_disable=False, poll_interval=5.0, bind_port=8080,
+                check_id='foo:bar'
             ),
             call().run()
         ]
@@ -231,7 +318,8 @@ class TestRunner(object):
         assert mock_redir.mock_calls == [
             call(
                 'foo:123', redir_to_https=False, redir_to_ip=False,
-                log_disable=True
+                log_disable=True, poll_interval=5.0, bind_port=8080,
+                check_id='service:vault'
             ),
             call().run()
         ]
@@ -250,7 +338,8 @@ class TestRunner(object):
         assert mock_redir.mock_calls == [
             call(
                 'foo:123', redir_to_https=False, redir_to_ip=False,
-                log_disable=False
+                log_disable=False, poll_interval=5.0, bind_port=8080,
+                check_id='service:vault'
             ),
             call().run()
         ]
@@ -270,7 +359,8 @@ class TestRunner(object):
         assert mock_redir.mock_calls == [
             call(
                 'foo:123', redir_to_https=False, redir_to_ip=False,
-                log_disable=False
+                log_disable=False, poll_interval=5.0, bind_port=8080,
+                check_id='service:vault'
             ),
             call().run()
         ]
@@ -281,15 +371,16 @@ class TestRunner(object):
         with patch('%s.set_log_level_format' % pbm) as mock_set:
             set_log_info()
         assert mock_set.mock_calls == [
-            call(logging.INFO, '%(levelname)s:%(name)s:%(message)s')
+            call(logging.INFO, '%(asctime)s %(levelname)s:%(name)s:%(message)s')
         ]
 
     def test_set_log_debug(self):
         with patch('%s.set_log_level_format' % pbm) as mock_set:
             set_log_debug()
         assert mock_set.mock_calls == [
-            call(logging.DEBUG, "[%(levelname)s %(filename)s:%(lineno)s - "
-                                "%(name)s.%(funcName)s() ] %(message)s")
+            call(logging.DEBUG,
+                 "%(asctime)s [%(levelname)s %(filename)s:%(lineno)s - "
+                 "%(name)s.%(funcName)s() ] %(message)s")
         ]
 
     def test_set_log_level_format(self):
