@@ -17,7 +17,7 @@ import os
 import re
 # to let sphinx find the actual source...
 sys.path.insert(0, os.path.abspath("../.."))
-from redirector.version import _VERSION
+from vault_redirector.version import _VERSION
 import sphinx.environment
 from docutils.utils import get_source_line
 
@@ -288,10 +288,11 @@ texinfo_documents = [
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {
     'https://docs.python.org/': None,
-    'requests': ('http://docs.python-requests.org/en/master/', None)
+    'requests': ('http://docs.python-requests.org/en/master/', None),
+    'twisted': ('https://twistedmatrix.com/documents/16.0.0/api/', None)
 }
 
-autoclass_content = 'init'
+autoclass_content = 'class'
 autodoc_default_flags = ['members', 'undoc-members', 'private-members', 'special-members', 'show-inheritance']
 
 nitpick_ignore = [
@@ -304,7 +305,8 @@ linkcheck_ignore = [
     r'https?://www\.virtualenv\.org.*',
     r'https?://.*\.readthedocs\.org.*',
     r'https?://codecov\.io.*',
-    r'https?://.*readthedocs\.org.*'
+    r'https?://.*readthedocs\.org.*',
+    r'^https://pypi\.python\.org/pypi/vault-redirector.*'
 ]
 
 # exclude module docstrings - see http://stackoverflow.com/a/18031024/211734

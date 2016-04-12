@@ -37,7 +37,7 @@ We take advantage of Vault's 307 redirects (and the assumption that any protocol
 Requirements
 ------------
 
-1. Python 2.7, 3.3, 3.4 or 3.5 and ``pip``; `virtualenv <https://virtualenv.pypa.io/en/latest/>`_ is recommended.
+1. Python >= 2.7, 3.3, 3.4 or 3.5 and ``pip``; `virtualenv <https://virtualenv.pypa.io/en/latest/>`_ is recommended.
 2. The `requests <http://docs.python-requests.org/en/master/>`_ library (will be installed automatically via ``pip``).
 3. `Consul <https://www.consul.io/>`_ running and configured with service checks for Vault (see below)
 
@@ -103,6 +103,11 @@ by sending SIGUSR2 to the process.
 
 Testing
 -------
+
+TODO.
+
+Development
+-----------
 
 TODO.
 

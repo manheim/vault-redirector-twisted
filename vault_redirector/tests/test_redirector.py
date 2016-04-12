@@ -37,7 +37,6 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 """
 
 import sys
-import pytest
 from vault_redirector.redirector import VaultRedirector, VaultRedirectorSite
 import signal
 import vault_redirector.tests.testdata as testdata
@@ -47,6 +46,7 @@ from twisted.web.server import Request
 from twisted.web._responses import NOT_FOUND, SERVICE_UNAVAILABLE
 from twisted.internet.address import IPv4Address
 from twisted.web.http_headers import Headers
+import pytest
 
 # https://code.google.com/p/mock/issues/detail?id=249
 # py>=3.4 should use unittest.mock not the mock package on pypi

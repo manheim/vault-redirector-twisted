@@ -57,7 +57,7 @@ class VaultRedirector(object):
         """
         Initialize the redirector service.
 
-        :param consul_host_port: Consul host/IP and port in host:port form
+        :param consul_host_port: Consul host/IP and port in ``host:port`` form
         :type consul_host_port: str
         :param redir_to_https: Redirect to HTTPS if True, otherwise HTTP
         :type redir_to_https: bool
@@ -127,8 +127,7 @@ class VaultRedirector(object):
         reply, and return either the active node in (name|ip):port form, or
         None if no active node can be found.
 
-        :return: active node in (name|ip):port form or None
-        :rtype: str or None
+        :return: active node in ``(name|ip):port`` form (str) or None
         """
         url = 'http://%s/v1/health/service/vault' % self.consul_host_port
         # parse the health check results and find the one that's passing
@@ -154,6 +153,11 @@ class VaultRedirector(object):
         return None
 
     def update_active_node(self):
+        """
+        Run :py:meth:`~.get_active_node` and update ``self.active_node_ip_port``
+        to its value. If it raised an Exception, log the exception and set
+        ``self.active_node_ip_port`` to None.
+        """
         try:
             newnode = self.get_active_node()
         except Exception:
@@ -259,7 +263,7 @@ class VaultRedirectorSite(object):
                 if request.queued:
                     queued = 'QUEUED '
                 logger.warning('RESPOND 503 for %s%s request for %s from %s:%s',
-                               queued, request.method, path,
+                               queued, str(request.method), path,
                                request.client.host, request.client.port)
             return resource.ErrorPage(
                 SERVICE_UNAVAILABLE,
@@ -276,7 +280,7 @@ class VaultRedirectorSite(object):
             if request.queued:
                 queued = 'QUEUED '
             logger.info('RESPOND 307 to %s for %s%s request for %s from %s:%s',
-                        redir_to, queued, request.method, path,
+                        redir_to, queued, str(request.method), path,
                         request.client.host, request.client.port)
         request.setResponseCode(307)
         request.setHeader("Location", redir_to)
