@@ -472,3 +472,14 @@ class TestVaultRedirectorSite(object):
         assert resp.detail == 'No active Vault leader could be determined ' \
                               'from Consul API'
         assert mock_logger.mock_calls == []
+
+
+class TestVaultRedirectorIntegration(object):
+
+    def test_request(self):
+        with patch('%s.setup_signal_handlers' % pb) as mock_signals:
+            with patch('%s.get_active_node' % pb) as mock_get_active:
+                cls = VaultRedirector('consul:1234')
+                cls.run()
+        assert mock_signals.mock_calls == [call()]
+        assert mock_get_active.mock_calls == [call()]

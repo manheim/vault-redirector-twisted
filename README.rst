@@ -37,9 +37,15 @@ We take advantage of Vault's 307 redirects (and the assumption that any protocol
 Requirements
 ------------
 
-1. Python >= 2.7, 3.3, 3.4 or 3.5 and ``pip``; `virtualenv <https://virtualenv.pypa.io/en/latest/>`_ is recommended.
-2. The `requests <http://docs.python-requests.org/en/master/>`_ library (will be installed automatically via ``pip``).
-3. `Consul <https://www.consul.io/>`_ running and configured with service checks for Vault (see below)
+1. Python >= 2.7, 3.3+ with ``pip``
+2. `virtualenv <https://virtualenv.pypa.io/en/latest/>`_ is recommended.
+3. The `requests <http://docs.python-requests.org/en/master/>`_ library (will be installed automatically via ``pip``).
+4. `Consul <https://www.consul.io/>`_ running and configured with service checks for Vault (see below)
+
+**Note** that Twisted does not yet (April 2016) have full Python 3 compatibility. Per
+`Twisted's python3 plan <https://twistedmatrix.com/trac/wiki/Plan/Python3#Details>`_
+it appears that all modules we use are done, and both unit and manual tests under Python
+3.5 work. Please note, however, that Twisted is not officially supported on Python3.
 
 Consul Service Checks
 ++++++++++++++++++++++
@@ -79,7 +85,57 @@ We recommend installing inside an isolated virtualenv. If you don't want to do t
 Usage
 -----
 
-TODO: usage
+Command Line Usage
+++++++++++++++++++
+
+All options and configuration are passed in via command-line options.
+
+.. code-block:: console
+
+    jantman@exodus$ vault-redirector -h
+    usage: vault-redirector [-h] [-v] [-l] [-V] [-S] [-I] [-p POLL_INTERVAL]
+                            [-P BIND_PORT] [-c CHECKID]
+                            CONSUL_HOST_PORT
+
+    Python/Twisted application to redirect Hashicorp Vault client requests to the
+    active node in a HA cluster
+
+    positional arguments:
+      CONSUL_HOST_PORT      Consul address in host:port form
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      -v, --verbose         verbose output. specify twice for debug-level output.
+                            See also -l|--log-enable
+      -l, --log-disable     If specified, disable ALL logging after initial setup.
+                            This can be changed at runtime via signals
+      -V, --version         show program's version number and exit
+      -S, --https           Redirect to HTTPS scheme instead of plain HTTP.
+      -I, --ip              redirect to active node IP instead of name
+      -p POLL_INTERVAL, --poll-interval POLL_INTERVAL
+                            Consul service health poll interval in seconds
+                            (default 5.0)
+      -P BIND_PORT, --port BIND_PORT
+                            Port number to listen on (default 8080)
+      -c CHECKID, --checkid CHECKID
+                            Consul service CheckID for Vault (default:
+                            "service:vault"
+
+By default, ``vault-redirector`` will redirect clients to the hostname (Consul
+health check **node name**) of the active Vault node, over plain HTTP. This can
+be changed via the ``-I | --ip`` and ``-S | --https`` options.
+
+Running as a Daemon / Service
++++++++++++++++++++++++++++++
+
+For anything other than testing, ``vault-redirector`` should be run as a system
+service. There is no built-in daemonizing support; this is left up to your
+operating system.
+
+Here is an example `systemd <https://www.freedesktop.org/wiki/Software/systemd/>`_
+service unit file for ``vault-redirector``:
+
+TODO: sample unit file
 
 Logging and Debugging
 ---------------------
@@ -101,13 +157,27 @@ changeable at runtime).
 At any time, logging can be enabled by sending SIGUSR1 to the process, or disabled
 by sending SIGUSR2 to the process.
 
-Testing
+Support
 -------
 
-TODO.
+Please open any issues or feature requests in the `manheim/vault-redirector-twisted GitHub issue tracker<https://github.com/manheim/vault-redirector-twisted/issues>`_  They will be dealt with as time allows. Please include as much detail as possible, including your version of ``vault-redirector`` and the Python version and OS/distribution it's running on, as well as the command line arguments used when running it. Debug-level logs will likely be very helpful.
 
 Development
 -----------
+
+Pull requests are welcome. Please cut them against the ``master`` branch of the `manheim/vault-redirector-twisted <https://github.com/manheim/vault-redirector-twisted>`_ repository. It is expected that test coverage increase or stay the same, and that all tests pass.
+
+Testing
+-------
+
+Testing is accomplished via `pytest <http://pytest.org/latest/>`_ and
+`tox <http://tox.readthedocs.org/en/latest/>`_. By default tests will be run
+for Python 2.7, 3.3, 3.4. 3.5 and the documentation. To run tests locally, use ``tox`` per its documentation (i.e. ``tox -e py27`` to run the Python 2.7 test suite).
+
+Automated testing is accomplished via TravisCI.
+
+Release Process
+---------------
 
 TODO.
 

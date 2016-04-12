@@ -51,8 +51,10 @@ if (
         sys.version_info[0] < 3 or
         sys.version_info[0] == 3 and sys.version_info[1] < 4
 ):
+    IS_PY34PLUS = False
     from mock import patch, call, Mock
 else:
+    IS_PY34PLUS = True
     from unittest.mock import patch, call, Mock
 
 pbm = 'vault_redirector.runner'  # patch base path for this module
@@ -142,11 +144,19 @@ class TestRunner(object):
             self.cls.parse_args(['-V'])
         assert excinfo.value.code == 0
         out, err = capsys.readouterr()
-        assert out == ''
         expected = 'vault-redirector ' + _VERSION + ' (see <' + _PROJECT_URL \
                    + '> for source code)' + "\n"
         # argparser's HelpFormatter class limits help output lines to 24 chars
-        assert err == expected[:73] + "\n" + expected[73:]
+        expected = expected[:73] + "\n" + expected[73:]
+        if IS_PY34PLUS:
+            # python >= 3.4 argparse outputs version to STDOUT not STDERR;
+            # see https://bugs.python.org/issue18920 and
+            # https://docs.python.org/3/whatsnew/3.4.html#other-improvements
+            assert out == expected
+            assert err == ''
+        else:
+            assert out == ''
+            assert err == expected
 
     def test_parse_args_https(self):
         res = self.cls.parse_args(['-S', 'foo:123'])
