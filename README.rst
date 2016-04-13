@@ -198,7 +198,7 @@ Testing
 
 Testing is accomplished via `pytest <http://pytest.org/latest/>`_ and
 `tox <http://tox.readthedocs.org/en/latest/>`_. By default tests will be run
-for Python 2.7, 3.3, 3.4. 3.5 and the documentation. To run tests locally, use ``tox`` per its documentation (i.e. ``tox -e py27`` to run the Python 2.7 test suite).
+for Python 2.7, 3.3, 3.4. 3.5 and the documentation. To run tests locally, use ``tox`` per its documentation (i.e. ``tox -e py27-unit`` to run the Python 2.7 unit tests or ``tox -e py27-acceptance`` for the acceptance tests).
 
 Automated testing is accomplished via TravisCI.
 
