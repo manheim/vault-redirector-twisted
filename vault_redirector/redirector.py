@@ -92,6 +92,10 @@ class VaultRedirector(object):
             logger.warning('Starting VaultRedirector with ALL LOGGING '
                            'DISABLED; send SIGUSR1 to PID %d enable logging.',
                            getpid())
+        # per the Twisted API docs, "New application code should prefer to pass
+        # and accept the reactor as a parameter where it is needed, rather than
+        # relying on being able to import this module to get a reference.
+        self.reactor = reactor
 
     def setup_signal_handlers(self):
         """
@@ -131,6 +135,8 @@ class VaultRedirector(object):
         """
         url = 'http://%s/v1/health/service/vault' % self.consul_host_port
         # parse the health check results and find the one that's passing
+        logger.critical('CRITICAL in get_active_node()')  # TODO DEBUG remove me
+        logger.debug('in get_active_node()')  # TODO DEBUG remove me
         if self.log_enabled:
             logger.debug('Polling active node from: %s', url)
         r = requests.get(url)
@@ -172,6 +178,11 @@ class VaultRedirector(object):
                            self.active_node_ip_port, newnode)
         self.active_node_ip_port = newnode
 
+    def run_reactor(self):
+        """Method to run the Twisted reactor; mock point for testing"""
+        logger.debug('Running reactor...')  # TODO DEBUG remove me
+        self.reactor.run()
+
     def run(self):
         """setup the site, start listening on port, setup the looping call to
         :py:meth:`~.update_active_node` every ``self.poll_interval`` seconds,
@@ -182,20 +193,21 @@ class VaultRedirector(object):
             logger.critical("ERROR: Could not get active vault node from "
                             "Consul. Exiting.")
             raise SystemExit(3)
+        logger.debug('middle of run()')  # TODO DEBUG remove me
         logger.warning("Initial Vault active node: %s",
                        self.active_node_ip_port)
         site = server.Site(VaultRedirectorSite(self))
         # setup our HTTP listener
         logger.warning('Setting TCP listener on port %d for HTTP requests',
                        self.bind_port)
-        reactor.listenTCP(self.bind_port, site)
+        self.reactor.listenTCP(self.bind_port, site)
         # setup the update_active_node poll every POLL_INTERVAL seconds
         l = task.LoopingCall(self.update_active_node)
         logger.warning('Setting Consul poll interval to %s seconds',
                        self.poll_interval)
         l.start(self.poll_interval)
         logger.warning('Starting Twisted reactor (event loop)')
-        reactor.run()
+        self.run_reactor()
 
 
 class VaultRedirectorSite(object):

@@ -133,9 +133,35 @@ service. There is no built-in daemonizing support; this is left up to your
 operating system.
 
 Here is an example `systemd <https://www.freedesktop.org/wiki/Software/systemd/>`_
-service unit file for ``vault-redirector``:
+service unit file for ``vault-redirector``, assuming you wish to run it as a
+``vaultredirector`` user and group, and it is installed into a virtualenv at
+``/home/vaultredirector/venv``, and Consul is running on localhost (127.0.0.1)
+on port 8500.
 
-TODO: sample unit file
+.. code-block:: ini
+
+    [Unit]
+    Description=Vault Redirector
+    Requires=basic.target network.target
+    After=basic.target network.target
+
+    [Service]
+    User=vaultredirector
+    Group=vaultredirector
+    PrivateDevices=yes
+    PrivateTmp=yes
+    ProtectSystem=full
+    ProtectHome=read-only
+    CapabilityBoundingSet=
+    NoNewPrivileges=yes
+    ExecStart=/home/vaultredirector/venv/bin/vault-redirector 127.0.0.1:8500
+    TimeoutStopSec=30s
+    Restart=on-failure
+    StartLimitInterval=10s
+    StartLimitBurst=10
+
+    [Install]
+    WantedBy=multi-user.target
 
 Logging and Debugging
 ---------------------

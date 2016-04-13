@@ -38,13 +38,17 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 
 import sys
 from vault_redirector.redirector import VaultRedirector, VaultRedirectorSite
+from vault_redirector.redirector import logger as vr_logger
+from datetime import datetime, timedelta
 import signal
+import logging
 import vault_redirector.tests.testdata as testdata
 from vault_redirector.version import _VERSION
+from twisted.internet import reactor, task
+from twisted.internet.address import IPv4Address
 from twisted.web import resource
 from twisted.web.server import Request
 from twisted.web._responses import NOT_FOUND, SERVICE_UNAVAILABLE
-from twisted.internet.address import IPv4Address
 from twisted.web.http_headers import Headers
 import pytest
 
@@ -262,12 +266,13 @@ class TestVaultRedirector(object):
         ]
 
     def test_run(self):
+        self.cls.reactor = Mock(spec_set=reactor)
         with patch('%s.logger' % pbm) as mock_logger:
             with patch('%s.server.Site' % pbm) as mock_site:
                 with patch('%s.task.LoopingCall' % pbm) as mock_looping:
-                    with patch('%s.reactor' % pbm) as mock_reactor:
-                        with patch('%s.VaultRedirectorSite' % pbm) as mock_vrs:
-                            with patch('%s.get_active_node' % pb) as mock_get:
+                    with patch('%s.VaultRedirectorSite' % pbm) as mock_vrs:
+                        with patch('%s.get_active_node' % pb) as mock_get:
+                            with patch('%s.run_reactor' % pb) as mock_run:
                                 mock_get.return_value = 'consul:1234'
                                 self.cls.run()
         assert self.cls.active_node_ip_port == 'consul:1234'
@@ -280,22 +285,23 @@ class TestVaultRedirector(object):
         ]
         assert mock_vrs.mock_calls == [call(self.cls)]
         assert mock_site.mock_calls == [call(mock_vrs.return_value)]
-        assert mock_reactor.mock_calls == [
+        assert self.cls.reactor.mock_calls == [
             call.listenTCP(8080, mock_site.return_value),
-            call.run()
         ]
+        assert mock_run.mock_calls == [call()]
         assert mock_looping.mock_calls == [
             call(self.cls.update_active_node),
             call().start(5.0)
         ]
 
     def test_run_error(self):
+        self.cls.reactor = Mock(spec_set=reactor)
         with patch('%s.logger' % pbm) as mock_logger:
             with patch('%s.server.Site' % pbm) as mock_site:
                 with patch('%s.task.LoopingCall' % pbm) as mock_looping:
-                    with patch('%s.reactor' % pbm) as mock_reactor:
-                        with patch('%s.VaultRedirectorSite' % pbm) as mock_vrs:
-                            with patch('%s.get_active_node' % pb) as mock_get:
+                    with patch('%s.VaultRedirectorSite' % pbm) as mock_vrs:
+                        with patch('%s.get_active_node' % pb) as mock_get:
+                            with patch('%s.run_reactor' % pb) as mock_run:
                                 mock_get.return_value = None
                                 with pytest.raises(SystemExit) as excinfo:
                                     self.cls.run()
@@ -306,8 +312,14 @@ class TestVaultRedirector(object):
         ]
         assert mock_vrs.mock_calls == []
         assert mock_site.mock_calls == []
-        assert mock_reactor.mock_calls == []
+        assert self.cls.reactor.mock_calls == []
         assert mock_looping.mock_calls == []
+        assert mock_run.mock_calls == []
+
+    def test_run_reactor(self):
+        self.cls.reactor = Mock(spec_set=reactor)
+        self.cls.run_reactor()
+        assert self.cls.reactor.mock_calls == [call.run()]
 
 
 class TestVaultRedirectorSite(object):
@@ -476,10 +488,62 @@ class TestVaultRedirectorSite(object):
 
 class TestVaultRedirectorIntegration(object):
 
-    def test_request(self):
-        with patch('%s.setup_signal_handlers' % pb) as mock_signals:
+    def se_run_reactor(self):
+        """this will run the reactor,
+        but schedule a task to stop it in 7 seconds"""
+        task.deferLater(self.cls.reactor, 7.0, self.cls.reactor.stop)
+        self.cls.reactor.run()
+
+    def DONOTtest_polling(self):
+        # set debug-level logging
+        loghandler = TestLogHandler()
+        vr_logger.addHandler(loghandler)
+        vr_logger.setLevel(logging.DEBUG)
+        with patch('%s.setup_signal_handlers' % pb):
             with patch('%s.get_active_node' % pb) as mock_get_active:
-                cls = VaultRedirector('consul:1234')
-                cls.run()
-        assert mock_signals.mock_calls == [call()]
-        assert mock_get_active.mock_calls == [call()]
+                with patch('%s.run_reactor' % pb) as mock_run_reactor:
+                    mock_get_active.return_value = 'foo:1234'
+                    mock_run_reactor.side_effect = self.se_run_reactor
+                    self.cls = VaultRedirector('consul:1234')
+                    self.cls.log_enabled = True
+                    start = datetime.now()
+                    self.cls.run()
+                    end = datetime.now()
+        assert (end - start) > timedelta(seconds=6), "Error: reactor did not " \
+                "run > 6 seconds"
+        assert self.cls.active_node_ip_port == 'foo:1234'
+        assert mock_get_active.mock_calls == [call(), call(), call()]
+        assert loghandler.messages == []
+
+    def test_polling_other(self):
+        with patch('%s.logger' % pbm) as mock_logger:
+            with patch('%s.setup_signal_handlers' % pb):
+                with patch('%s.get_active_node' % pb) as mock_get_active:
+                    with patch('%s.run_reactor' % pb) as mock_run_reactor:
+                        mock_get_active.return_value = 'foo:1234'
+                        mock_run_reactor.side_effect = self.se_run_reactor
+                        self.cls = VaultRedirector('consul:1234')
+                        assert self.cls.active_node_ip_port is None
+                        self.cls.log_enabled = True
+                        start = datetime.now()
+                        self.cls.run()
+                        end = datetime.now()
+        assert (end - start) > timedelta(seconds=6), "Error: reactor did not " \
+                "run > 6 seconds"
+        assert self.cls.active_node_ip_port == 'foo:1234'
+
+
+class TestLogHandler(logging.Handler):
+
+    level = logging.DEBUG
+    filters = []
+    lock = False
+
+    def __init__(self):
+        self.messages = []
+
+    def flush(self):
+        pass
+
+    def emit(self, record):
+        self.messages.append((record.levelname, record.msg, record.args))
