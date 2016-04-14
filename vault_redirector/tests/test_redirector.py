@@ -41,7 +41,7 @@ import os
 from vault_redirector.redirector import VaultRedirector, VaultRedirectorSite
 import signal
 import vault_redirector.tests.testdata as testdata
-from vault_redirector.version import _VERSION
+from vault_redirector.version import _VERSION, _PROJECT_URL
 from twisted._version import version as twisted_version
 from twisted.internet import reactor, task
 from twisted.internet.address import IPv4Address
@@ -377,9 +377,10 @@ class TestVaultRedirectorSite(object):
         if sys.version_info[0] >= 3:
             self.empty_resp = b''
         self.mock_redir = Mock(spec_set=VaultRedirector)
-        type(self.mock_redir).active_node_ip_port = 'consul:1234'
+        type(self.mock_redir).active_node_ip_port = 'mynode:1234'
         type(self.mock_redir).log_enabled = True
         type(self.mock_redir).consul_scheme = 'http'
+        type(self.mock_redir).consul_host_port = 'consul:5678'
         self.cls = VaultRedirectorSite(self.mock_redir)
 
         # mock client request
@@ -395,10 +396,16 @@ class TestVaultRedirectorSite(object):
         type(self.mock_request).queued = 0
 
     def test_init(self):
-        mock_redir = Mock(spec_set=VaultRedirector)
-        cls = VaultRedirectorSite(mock_redir)
-        assert cls.redirector == mock_redir
+        cls = VaultRedirectorSite(self.mock_redir)
+        assert cls.redirector == self.mock_redir
         assert cls.isLeaf is True
+        assert json.loads(cls.status_response) == {
+            'healthy': True,
+            'application': 'vault-redirector',
+            'source': _PROJECT_URL,
+            'version': _VERSION,
+            'consul_host_port': 'consul:5678'
+        }
 
     def test_getChildWithDefault(self):
         res = self.cls.getChildWithDefault(None, None)
@@ -408,7 +415,7 @@ class TestVaultRedirectorSite(object):
         assert res.detail == 'No Such Resource'
 
     def test_render(self):
-        expected_location = 'http://consul:1234/foo/bar'
+        expected_location = 'http://mynode:1234/foo/bar'
         expected_server = 'vault-redirector/%s/TwistedWeb/16.1.0' % _VERSION
         if sys.version_info[0] < 3:
             type(self.mock_request).uri = '/foo/bar'
@@ -435,7 +442,7 @@ class TestVaultRedirectorSite(object):
         ]
 
     def test_render_queued(self):
-        expected_location = 'http://consul:1234/foo/bar'
+        expected_location = 'http://mynode:1234/foo/bar'
         expected_server = 'vault-redirector/%s/TwistedWeb/16.1.0' % _VERSION
         type(self.mock_request).uri = '/foo/bar'
         type(self.mock_request).path = '/foo/bar'
@@ -458,7 +465,7 @@ class TestVaultRedirectorSite(object):
         ]
 
     def test_render_log_disabled(self):
-        expected_location = 'http://consul:1234/foo/bar'
+        expected_location = 'http://mynode:1234/foo/bar'
         expected_server = 'vault-redirector/%s/TwistedWeb/16.1.0' % _VERSION
         type(self.mock_request).uri = '/foo/bar'
         type(self.mock_request).path = '/foo/bar'
@@ -541,6 +548,29 @@ class TestVaultRedirectorSite(object):
                               'from Consul API'
         assert mock_logger.mock_calls == []
 
+    def test_render_healthcheck(self):
+        expected_server = 'vault-redirector/%s/TwistedWeb/16.1.0' % _VERSION
+        if sys.version_info[0] < 3:
+            type(self.mock_request).uri = '/vault-redirector-health'
+            type(self.mock_request).path = '/vault-redirector-health'
+            expected = 'foobar'
+        else:
+            # in py3 these are byte literals
+            type(self.mock_request).uri = b'/vault-redirector-health'
+            type(self.mock_request).path = b'/vault-redirector-health'
+            expected = b'foobar'
+        self.mock_request.reset_mock()
+
+        with patch('%s.logger' % pbm) as mock_logger:
+            self.cls.status_response = 'foobar'
+            resp = self.cls.render(self.mock_request)
+        assert self.mock_request.mock_calls == [
+            call.setHeader('server', expected_server),
+            call.setHeader("Content-Type", "application/json")
+        ]
+        assert resp == expected
+        assert mock_logger.mock_calls == []
+
 
 class TestVaultRedirectorAcceptance(object):
 
@@ -576,7 +606,7 @@ class TestVaultRedirectorAcceptance(object):
         url = 'http://127.0.0.1:%d' % self.cls.bind_port
         path = os.path.join(os.path.dirname(__file__), 'requester.py')
         self.poller = subprocess.Popen(
-            [sys.executable, path, url, '/bar/baz', '/redir_health'],
+            [sys.executable, path, url, '/bar/baz', '/vault-redirector-health'],
             stdout=subprocess.PIPE,
             universal_newlines=True
         )
@@ -657,6 +687,10 @@ class TestVaultRedirectorAcceptance(object):
             signal.alarm(0)  # disable SIGALRM
         assert self.cls.active_node_ip_port == 'bar:5678'  # from update_active
         assert self.update_active_called is True
+        assert cls_mocks['update_active_node'].mock_calls[0] == call()
+        assert cls_mocks['run_reactor'].mock_calls == [call()]
+        assert cls_mocks['get_active_node'].mock_calls == [call()]
+        # HTTP response checks
         resp = json.loads(self.response)
         # /bar/baz
         assert resp['/bar/baz']['headers'][
@@ -666,6 +700,13 @@ class TestVaultRedirectorAcceptance(object):
         assert resp['/bar/baz']['headers'][
                    'Location'] == 'http://bar:5678/bar/baz'
         assert resp['/bar/baz']['status_code'] == 307
-        assert cls_mocks['update_active_node'].mock_calls[0] == call()
-        assert cls_mocks['run_reactor'].mock_calls == [call()]
-        assert cls_mocks['get_active_node'].mock_calls == [call()]
+        # /vault-redirector-health
+        assert resp['/vault-redirector-health']['status_code'] == 200
+        health_info = json.loads(resp['/vault-redirector-health']['text'])
+        assert resp['/vault-redirector-health']['headers'][
+            'Content-Type'] == 'application/json'
+        assert health_info['healthy'] is True
+        assert health_info['application'] == 'vault-redirector'
+        assert health_info['version'] == _VERSION
+        assert health_info['source'] == _PROJECT_URL
+        assert health_info['consul_host_port'] == 'consul:1234'

@@ -163,6 +163,23 @@ on port 8500.
     [Install]
     WantedBy=multi-user.target
 
+Health Check
+++++++++++++
+
+Vault-redirector will respond to a request path of /vault-redirector-health with
+a HTTP 200 and a JSON body something like the following; this can be used for
+load balancer health checks.
+
+.. code-block:: json
+
+    {
+      'healthy': True,
+      'application': 'vault-redirector',
+      'source': '(string, project source URL)',
+      'version': '(string, current vault-redirector version)',
+      'consul_host_port': '(string, consul host:port being polled)'
+    }
+
 Logging and Debugging
 ---------------------
 

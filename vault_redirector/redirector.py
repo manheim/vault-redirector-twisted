@@ -39,6 +39,7 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 import sys
 import logging
 import signal
+import json
 from os import getpid
 import requests
 from twisted.web import resource
@@ -46,7 +47,7 @@ from twisted.web.server import Site
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
 from twisted.web._responses import NOT_FOUND, SERVICE_UNAVAILABLE
-from vault_redirector.version import _VERSION
+from vault_redirector.version import _VERSION, _PROJECT_URL
 
 logger = logging.getLogger()
 
@@ -242,6 +243,13 @@ class VaultRedirectorSite(object):
         :type redirector: :py:class:`~.VaultRedirector` instance
         """
         self.redirector = redirector
+        self.status_response = json.dumps({
+            'healthy': True,
+            'application': 'vault-redirector',
+            'source': _PROJECT_URL,
+            'version': _VERSION,
+            'consul_host_port': self.redirector.consul_host_port
+        })
 
     def getChildWithDefault(self, name, request):
         """
@@ -253,6 +261,12 @@ class VaultRedirectorSite(object):
         """
         return resource.ErrorPage(NOT_FOUND, "No Such Resource",
                                   "No Such Resource")
+
+    def make_response(self, s):
+        """python 3+ needs a binary response; create one"""
+        if sys.version_info[0] < 3:
+            return s
+        return s.encode('utf-8')  # nocoverage - unreachable under py2
 
     def render(self, request):
         """
@@ -279,13 +293,16 @@ class VaultRedirectorSite(object):
         :rtype: str
         """
         path = request.uri
+        # python3 will get a byte string here
         if not isinstance(path, str):  # nocoverage - py3 only
             path = path.decode('utf-8')
+        # find the original Twisted server header
         twisted_server = request.responseHeaders.getRawHeaders(
             'server', 'Twisted'
         )[0]
         request.setHeader('server',
                           'vault-redirector/%s/%s' % (_VERSION, twisted_server))
+        # if we don't know what the active Vault instance is, respond 503
         if self.redirector.active_node_ip_port is None:
             if self.redirector.log_enabled:
                 queued = ''
@@ -299,11 +316,18 @@ class VaultRedirectorSite(object):
                 "No Active Node",
                 "No active Vault leader could be determined from Consul API"
             )
+        # if we DO know what the active Vault node is, and got a request for
+        # the health check URL, serve it (200)
+        if path == '/vault-redirector-health':
+            request.setHeader("Content-Type", 'application/json')
+            return self.make_response(self.status_response)
+        # figure out redirect path
         redir_to = '%s://%s%s' % (
             self.redirector.consul_scheme,
             self.redirector.active_node_ip_port,
             path
         )
+        # log if logging is enabled
         if self.redirector.log_enabled:
             queued = ''
             if request.queued:
@@ -311,9 +335,8 @@ class VaultRedirectorSite(object):
             logger.info('RESPOND 307 to %s for %s%s request for %s from %s:%s',
                         redir_to, queued, str(request.method), path,
                         request.client.host, request.client.port)
+        # send the redirect
         request.setResponseCode(307)
         request.setHeader("Location", redir_to)
         request.setHeader("Content-Type", "text/html; charset=UTF-8")
-        if sys.version_info[0] >= 3:
-            return b''
-        return ""
+        return self.make_response('')
