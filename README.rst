@@ -167,6 +167,7 @@ to INFO level (``-v``); logging can be turned on with SIGUSR1 as described below
     After=basic.target network.target
 
     [Service]
+    Type=simple
     User=vaultredirector
     Group=vaultredirector
     PrivateDevices=yes
@@ -176,10 +177,11 @@ to INFO level (``-v``); logging can be turned on with SIGUSR1 as described below
     CapabilityBoundingSet=
     NoNewPrivileges=yes
     ExecStart=/usr/local/vault-redirector/bin/vault-redirector -v -l 127.0.0.1:8500
+    RestartSec=5s
     TimeoutStopSec=30s
-    Restart=on-failure
-    StartLimitInterval=10s
-    StartLimitBurst=10
+    Restart=always
+    # disable all rate limiting; let it restart forever
+    StartLimitInterval=0
 
     [Install]
     WantedBy=multi-user.target
