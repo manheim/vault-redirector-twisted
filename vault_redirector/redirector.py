@@ -46,7 +46,7 @@ from twisted.web import resource
 from twisted.web.server import Site
 from twisted.internet import reactor
 from twisted.internet.task import LoopingCall
-from twisted.web._responses import NOT_FOUND, SERVICE_UNAVAILABLE
+from twisted.web._responses import NOT_FOUND, SERVICE_UNAVAILABLE, OK
 from vault_redirector.version import _VERSION, _PROJECT_URL
 
 logger = logging.getLogger()
@@ -272,6 +272,33 @@ class VaultRedirectorSite(object):
             return s
         return s.encode('utf-8')  # nocoverage - unreachable under py2
 
+    def healthcheck(self, request):
+        """
+        Generate and return a healthcheck response.
+
+        :param request: incoming HTTP request
+        :type request: :py:class:`twisted.web.server.Request`
+        :return: JSON response data string
+        :rtype: str
+        """
+        statuscode = OK
+        msg = self.make_response('OK')
+        if self.redirector.active_node_ip_port is None:
+            statuscode = SERVICE_UNAVAILABLE
+            msg = self.make_response('No Active Vault')
+        request.setResponseCode(statuscode, message=msg)
+        request.setHeader("Content-Type", 'application/json')
+        # log if logging is enabled
+        if self.redirector.log_enabled:
+            queued = ''
+            if request.queued:
+                queued = 'QUEUED '
+            logger.info('RESPOND %d for %s%s request for '
+                        '/vault-redirector-health from %s:%s',
+                        statuscode, queued, str(request.method),
+                        request.client.host, request.client.port)
+        return self.make_response(self.status_response())
+
     def render(self, request):
         """
         Render the response to the given request. This simply gets the current
@@ -306,6 +333,9 @@ class VaultRedirectorSite(object):
         )[0]
         request.setHeader('server',
                           'vault-redirector/%s/%s' % (_VERSION, twisted_server))
+        # handle health check request
+        if path == '/vault-redirector-health':
+            return self.healthcheck(request)
         # if we don't know what the active Vault instance is, respond 503
         if self.redirector.active_node_ip_port is None:
             if self.redirector.log_enabled:
@@ -320,11 +350,7 @@ class VaultRedirectorSite(object):
                 "No Active Node",
                 "No active Vault leader could be determined from Consul API"
             )
-        # if we DO know what the active Vault node is, and got a request for
-        # the health check URL, serve it (200)
-        if path == '/vault-redirector-health':
-            request.setHeader("Content-Type", 'application/json')
-            return self.make_response(self.status_response())
+        # if we DO know what the active Vault node is, redirect
         # figure out redirect path
         redir_to = '%s://%s%s' % (
             self.redirector.consul_scheme,

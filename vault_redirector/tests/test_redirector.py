@@ -546,21 +546,159 @@ class TestVaultRedirectorSite(object):
         if sys.version_info[0] < 3:
             type(self.mock_request).uri = '/vault-redirector-health'
             type(self.mock_request).path = '/vault-redirector-health'
+        else:
+            # in py3 these are byte literals
+            type(self.mock_request).uri = b'/vault-redirector-health'
+            type(self.mock_request).path = b'/vault-redirector-health'
+        self.mock_request.reset_mock()
+        with patch('%s.logger' % pbm) as mock_logger:
+            with patch('%s.VaultRedirectorSite.healthcheck' % pbm) as mock_hc:
+                mock_hc.return_value = 'myresult'
+                resp = self.cls.render(self.mock_request)
+        assert self.mock_request.mock_calls == [
+            call.setHeader('server', expected_server)
+        ]
+        assert resp == 'myresult'
+        assert mock_logger.mock_calls == []
+        assert mock_hc.mock_calls == [call(self.mock_request)]
+
+    def test_healthcheck(self):
+        type(self.mock_redir).log_enabled = True
+        if sys.version_info[0] < 3:
+            type(self.mock_request).uri = '/vault-redirector-health'
+            type(self.mock_request).path = '/vault-redirector-health'
             expected = 'foobar'
+            expected_msg = 'OK'
         else:
             # in py3 these are byte literals
             type(self.mock_request).uri = b'/vault-redirector-health'
             type(self.mock_request).path = b'/vault-redirector-health'
             expected = b'foobar'
-        self.mock_request.reset_mock()
+            expected_msg = b'OK'
 
         with patch('%s.logger' % pbm) as mock_logger:
             with patch('%s.VaultRedirectorSite.status_response' % pbm
                        ) as mock_status:
                 mock_status.return_value = 'foobar'
-                resp = self.cls.render(self.mock_request)
+                resp = self.cls.healthcheck(self.mock_request)
         assert self.mock_request.mock_calls == [
-            call.setHeader('server', expected_server),
+            call.setResponseCode(200, message=expected_msg),
+            call.setHeader("Content-Type", "application/json")
+        ]
+        assert resp == expected
+        assert mock_logger.mock_calls == [
+            call.info('RESPOND %d for %s%s request for /vault-redirector-health'
+                      ' from %s:%s', 200, '', 'GET', '1.2.3.4', 12345)
+        ]
+
+    def test_healthcheck_queued(self):
+        type(self.mock_redir).log_enabled = True
+        type(self.mock_request).queued = 1
+        if sys.version_info[0] < 3:
+            type(self.mock_request).uri = '/vault-redirector-health'
+            type(self.mock_request).path = '/vault-redirector-health'
+            expected = 'foobar'
+            expected_msg = 'OK'
+        else:
+            # in py3 these are byte literals
+            type(self.mock_request).uri = b'/vault-redirector-health'
+            type(self.mock_request).path = b'/vault-redirector-health'
+            expected = b'foobar'
+            expected_msg = b'OK'
+
+        with patch('%s.logger' % pbm) as mock_logger:
+            with patch('%s.VaultRedirectorSite.status_response' % pbm
+                       ) as mock_status:
+                mock_status.return_value = 'foobar'
+                resp = self.cls.healthcheck(self.mock_request)
+        assert self.mock_request.mock_calls == [
+            call.setResponseCode(200, message=expected_msg),
+            call.setHeader("Content-Type", "application/json")
+        ]
+        assert resp == expected
+        assert mock_logger.mock_calls == [
+            call.info('RESPOND %d for %s%s request for /vault-redirector-health'
+                      ' from %s:%s', 200, 'QUEUED ', 'GET', '1.2.3.4', 12345)
+        ]
+
+    def test_healthcheck_log_disabled(self):
+        type(self.mock_redir).log_enabled = False
+        if sys.version_info[0] < 3:
+            type(self.mock_request).uri = '/vault-redirector-health'
+            type(self.mock_request).path = '/vault-redirector-health'
+            expected = 'foobar'
+            expected_msg = 'OK'
+        else:
+            # in py3 these are byte literals
+            type(self.mock_request).uri = b'/vault-redirector-health'
+            type(self.mock_request).path = b'/vault-redirector-health'
+            expected = b'foobar'
+            expected_msg = b'OK'
+
+        with patch('%s.logger' % pbm) as mock_logger:
+            with patch('%s.VaultRedirectorSite.status_response' % pbm
+                       ) as mock_status:
+                mock_status.return_value = 'foobar'
+                resp = self.cls.healthcheck(self.mock_request)
+        assert self.mock_request.mock_calls == [
+            call.setResponseCode(200, message=expected_msg),
+            call.setHeader("Content-Type", "application/json")
+        ]
+        assert resp == expected
+        assert mock_logger.mock_calls == []
+
+    def test_healthcheck_no_active(self):
+        type(self.mock_redir).active_node_ip_port = None
+        type(self.mock_redir).log_enabled = True
+        if sys.version_info[0] < 3:
+            type(self.mock_request).uri = '/vault-redirector-health'
+            type(self.mock_request).path = '/vault-redirector-health'
+            expected = 'foobar'
+            expected_msg = 'No Active Vault'
+        else:
+            # in py3 these are byte literals
+            type(self.mock_request).uri = b'/vault-redirector-health'
+            type(self.mock_request).path = b'/vault-redirector-health'
+            expected = b'foobar'
+            expected_msg = b'No Active Vault'
+
+        with patch('%s.logger' % pbm) as mock_logger:
+            with patch('%s.VaultRedirectorSite.status_response' % pbm
+                       ) as mock_status:
+                mock_status.return_value = 'foobar'
+                resp = self.cls.healthcheck(self.mock_request)
+        assert self.mock_request.mock_calls == [
+            call.setResponseCode(503, message=expected_msg),
+            call.setHeader("Content-Type", "application/json")
+        ]
+        assert resp == expected
+        assert mock_logger.mock_calls == [
+            call.info('RESPOND %d for %s%s request for /vault-redirector-health'
+                      ' from %s:%s', 503, '', 'GET', '1.2.3.4', 12345)
+        ]
+
+    def test_healthcheck_no_active_log_disabled(self):
+        type(self.mock_redir).active_node_ip_port = None
+        type(self.mock_redir).log_enabled = False
+        if sys.version_info[0] < 3:
+            type(self.mock_request).uri = '/vault-redirector-health'
+            type(self.mock_request).path = '/vault-redirector-health'
+            expected = 'foobar'
+            expected_msg = 'No Active Vault'
+        else:
+            # in py3 these are byte literals
+            type(self.mock_request).uri = b'/vault-redirector-health'
+            type(self.mock_request).path = b'/vault-redirector-health'
+            expected = b'foobar'
+            expected_msg = b'No Active Vault'
+
+        with patch('%s.logger' % pbm) as mock_logger:
+            with patch('%s.VaultRedirectorSite.status_response' % pbm
+                       ) as mock_status:
+                mock_status.return_value = 'foobar'
+                resp = self.cls.healthcheck(self.mock_request)
+        assert self.mock_request.mock_calls == [
+            call.setResponseCode(503, message=expected_msg),
             call.setHeader("Content-Type", "application/json")
         ]
         assert resp == expected
@@ -716,3 +854,4 @@ class TestVaultRedirectorAcceptance(object):
         assert health_info['version'] == _VERSION
         assert health_info['source'] == _PROJECT_URL
         assert health_info['consul_host_port'] == 'consul:1234'
+        assert health_info['active_vault'] == 'bar:5678'
