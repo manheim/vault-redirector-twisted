@@ -155,8 +155,9 @@ operating system.
 Here is an example `systemd <https://www.freedesktop.org/wiki/Software/systemd/>`_
 service unit file for ``vault-redirector``, assuming you wish to run it as a
 ``vaultredirector`` user and group, and it is installed into a virtualenv at
-``/home/vaultredirector/venv``, and Consul is running on localhost (127.0.0.1)
-on port 8500.
+``/usr/local/vault-redirector``, and Consul is running on localhost (127.0.0.1)
+on port 8500. This will start the service with logging disabled (``-l``) but set
+to INFO level (``-v``); logging can be turned on with SIGUSR1 as described below.
 
 .. code-block:: ini
 
@@ -174,7 +175,7 @@ on port 8500.
     ProtectHome=read-only
     CapabilityBoundingSet=
     NoNewPrivileges=yes
-    ExecStart=/home/vaultredirector/venv/bin/vault-redirector 127.0.0.1:8500
+    ExecStart=/usr/local/vault-redirector/bin/vault-redirector -v -l 127.0.0.1:8500
     TimeoutStopSec=30s
     Restart=on-failure
     StartLimitInterval=10s
