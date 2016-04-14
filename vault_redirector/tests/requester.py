@@ -43,15 +43,30 @@ import sys
 import requests
 import json
 
-def runit(url):
-    r = requests.get(url, allow_redirects=False)
-    d = {
-        'headers': dict(r.headers.items()),
-        'text': r.text,
-        'status_code': r.status_code
-    }
-    print(json.dumps(d))
+
+def runit(base_url, paths):
+    """
+    Given a list of URLs, GET each of them with :py:meth:`requests.get` (not
+    following redirects), save the headers, body text and status code, and then
+    print to STDOUT a JSON hash/dict with all of the results.
+
+    :param urls:
+    :return:
+    """
+    result = {}
+    for path in paths:
+        url = base_url + path
+        try:
+            r = requests.get(url, allow_redirects=False)
+            result[path] = {
+                'headers': dict(r.headers.items()),
+                'text': r.text,
+                'status_code': r.status_code,
+                'exception': None
+            }
+        except Exception as ex:
+            result[path] = {'exception': str(ex)}
+    print(json.dumps(result))
 
 if __name__ == "__main__":
-    url = sys.argv[1]
-    runit(url)
+    runit(sys.argv[1], sys.argv[2:])

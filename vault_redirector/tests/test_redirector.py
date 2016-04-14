@@ -39,7 +39,6 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 import sys
 import os
 from vault_redirector.redirector import VaultRedirector, VaultRedirectorSite
-from datetime import datetime
 import signal
 import vault_redirector.tests.testdata as testdata
 from vault_redirector.version import _VERSION
@@ -53,6 +52,8 @@ from twisted.web.http_headers import Headers
 import pytest
 import subprocess
 import json
+import logging
+import socket
 
 # https://code.google.com/p/mock/issues/detail?id=249
 # py>=3.4 should use unittest.mock not the mock package on pypi
@@ -66,6 +67,11 @@ else:
 
 pbm = 'vault_redirector.redirector'  # patch base path for this module
 pb = '%s.VaultRedirector' % pbm  # patch base for class
+
+fmt = "%(asctime)s [%(levelname)s %(filename)s:%(lineno)s - " \
+      "%(name)s.%(funcName)s() ] %(message)s"
+logging.basicConfig(level=logging.DEBUG, format=fmt)
+logger = logging.getLogger(os.path.basename(__file__))
 
 
 class TestVaultRedirector(object):
@@ -261,11 +267,12 @@ class TestVaultRedirector(object):
             mock_get.return_value = 'c:d'
             with patch('%s.logger' % pbm) as mock_logger:
                 self.cls.update_active_node()
-        assert self.cls.active_node_ip_port == 'c:d'
+        assert mock_get.mock_calls == [call()]
         assert mock_logger.mock_calls == [
             call.warning('Active vault node changed from %s to %s',
                          'a:b', 'c:d')
         ]
+        assert self.cls.active_node_ip_port == 'c:d'
 
     def test_listentcp(self):
         self.cls.reactor = Mock(spec_set=reactor)
@@ -400,8 +407,13 @@ class TestVaultRedirectorSite(object):
     def test_render(self):
         expected_location = 'http://consul:1234/foo/bar'
         expected_server = 'vault-redirector/%s/TwistedWeb/16.1.0' % _VERSION
-        type(self.mock_request).uri = '/foo/bar'
-        type(self.mock_request).path = '/foo/bar'
+        if sys.version_info[0] < 3:
+            type(self.mock_request).uri = '/foo/bar'
+            type(self.mock_request).path = '/foo/bar'
+        else:
+            # in py3 these are byte literals
+            type(self.mock_request).uri = b'/foo/bar'
+            type(self.mock_request).path = b'/foo/bar'
         self.mock_request.reset_mock()
 
         with patch('%s.logger' % pbm) as mock_logger:
@@ -535,17 +547,17 @@ class TestVaultRedirectorAcceptance(object):
         self.poller = None
         self.poller_check_task = None
         self.update_active_called = False
-        self.cls = VaultRedirector('consul:1234', poll_interval=2.0)
+        self.cls = None
 
     def se_run_reactor(self):
         """this will cause the reactor to run for 10 seconds only"""
-        print(datetime.now().isoformat(), 'call se_run_reactor')
+        logger.debug('call se_run_reactor')
         self.cls.reactor.callLater(10.0, self.stop_reactor)
         self.cls.reactor.run()
-        print(datetime.now().isoformat(), 'se_run_reactor done')
+        logger.debug('se_run_reactor done')
 
     def stop_reactor(self, signum=None, frame=None):
-        print(datetime.now().isoformat(), 'stopping reactor')
+        logger.debug('stopping reactor')
         self.cls.reactor.stop()
 
     def se_requester(self):
@@ -553,15 +565,15 @@ class TestVaultRedirectorAcceptance(object):
         While the reactor is polling, we can't make any requests. So have the
         reactor itself make the request and store the result.
         """
-        print(datetime.now().isoformat(), 'requester called; spawning process')
+        logger.debug('requester called; spawning process')
         # since Python is single-threaded and Twisted is just event-based,
         # we can't do a request and run the redirector from the same script.
         # Best choice is to used popen to run an external script to do the
         # redirect.
-        url = 'http://127.0.0.1:%d/bar/baz' % self.cls.bind_port
+        url = 'http://127.0.0.1:%d' % self.cls.bind_port
         path = os.path.join(os.path.dirname(__file__), 'requester.py')
         self.poller = subprocess.Popen(
-            [sys.executable, path, url],
+            [sys.executable, path, url, '/bar/baz', '/redir_health'],
             stdout=subprocess.PIPE,
             universal_newlines=True
         )
@@ -569,7 +581,7 @@ class TestVaultRedirectorAcceptance(object):
         self.poller_check_task = task.LoopingCall(self.check_request)
         self.poller_check_task.clock = self.cls.reactor
         self.poller_check_task.start(0.5)
-        print(datetime.now().isoformat(), 'poller_check_task started')
+        logger.debug('poller_check_task started')
 
     def check_request(self):
         """
@@ -577,19 +589,19 @@ class TestVaultRedirectorAcceptance(object):
         and stop the poller_check_task. If update_active has also already been
         called, stop the reactor.
         """
-        print(datetime.now().isoformat(), 'check_request called')
+        logger.debug('check_request called')
         if self.poller.poll() is None:
-            print(datetime.now().isoformat(), 'poller process still running')
+            logger.debug('poller process still running')
             return
         # stop the looping task
         self.poller_check_task.stop()
         assert self.poller.returncode == 0
         out, err = self.poller.communicate()
         self.response = out.strip()
+        logger.debug('check_request done; response: %s', self.response)
         # on python3, this will be binary
         if not isinstance(self.response, str):
             self.response = self.response.decode('utf-8')
-        print(datetime.now().isoformat(), 'check_request done')
         if self.update_active_called:
             self.stop_reactor()
 
@@ -600,14 +612,23 @@ class TestVaultRedirectorAcceptance(object):
         - update ``self.cls.active_node_ip_port``
         - if we've also already done the request, stop the reactor
         """
-        print(datetime.now().isoformat(), 'update_active called')
+        logger.debug('update_active called')
         self.update_active_called = True
         self.cls.active_node_ip_port = 'bar:5678'
         if self.response is not None:
             self.stop_reactor()
 
+    def get_open_port(self):
+        """find an available port to bind to. Slightly naive."""
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(('127.0.0.1', 0))
+        addr, port = s.getsockname()
+        s.close()
+        logger.debug('Using open port: %d', port)
+        return port
+
     def test_acceptance(self):
-        print(datetime.now().isoformat(), 'starting acceptance test')
+        logger.debug('starting acceptance test')
         with patch.multiple(
             pb,
             get_active_node=DEFAULT,
@@ -619,9 +640,10 @@ class TestVaultRedirectorAcceptance(object):
             cls_mocks['get_active_node'].return_value = 'foo:1234'
             cls_mocks['update_active_node'].side_effect = self.se_update_active
             # instantiate class
-            self.cls = VaultRedirector('consul:1234')
+            self.cls = VaultRedirector('consul:1234', poll_interval=0.5)
             # make sure active is None (starting state)
             assert self.cls.active_node_ip_port is None
+            self.cls.bind_port = self.get_open_port()
             self.cls.log_enabled = True
             # setup an async task to make the HTTP request
             self.cls.reactor.callLater(2.0, self.se_requester)
@@ -633,12 +655,14 @@ class TestVaultRedirectorAcceptance(object):
         assert self.cls.active_node_ip_port == 'bar:5678'  # from update_active
         assert self.update_active_called is True
         resp = json.loads(self.response)
-        assert resp['headers'][
-                   'Server'] == "vault-redirector/%s/TwistedWeb/%s" %(
+        # /bar/baz
+        assert resp['/bar/baz']['headers'][
+                   'Server'] == "vault-redirector/%s/TwistedWeb/%s" % (
             _VERSION, twisted_version.short()
         )
-        assert resp['headers']['Location'] == 'http://bar:5678/bar/baz'
-        assert resp['status_code'] == 307
+        assert resp['/bar/baz']['headers'][
+                   'Location'] == 'http://bar:5678/bar/baz'
+        assert resp['/bar/baz']['status_code'] == 307
         assert cls_mocks['update_active_node'].mock_calls[0] == call()
         assert cls_mocks['run_reactor'].mock_calls == [call()]
         assert cls_mocks['get_active_node'].mock_calls == [call()]

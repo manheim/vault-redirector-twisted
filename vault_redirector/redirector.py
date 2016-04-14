@@ -36,6 +36,7 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 ################################################################################
 """
 
+import sys
 import logging
 import signal
 from os import getpid
@@ -175,7 +176,6 @@ class VaultRedirector(object):
         if self.log_enabled and newnode != self.active_node_ip_port:
             logger.warning("Active vault node changed from %s to %s",
                            self.active_node_ip_port, newnode)
-        else:
             self.active_node_ip_port = newnode
 
     def run_reactor(self):
@@ -279,6 +279,8 @@ class VaultRedirectorSite(object):
         :rtype: str
         """
         path = request.uri
+        if not isinstance(path, str):
+            path = path.decode('utf-8')
         twisted_server = request.responseHeaders.getRawHeaders(
             'server', 'Twisted'
         )[0]
@@ -312,4 +314,6 @@ class VaultRedirectorSite(object):
         request.setResponseCode(307)
         request.setHeader("Location", redir_to)
         request.setHeader("Content-Type", "text/html; charset=UTF-8")
+        if sys.version_info[0] >= 3:
+            return b''
         return ""
