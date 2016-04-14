@@ -190,8 +190,10 @@ Health Check
 ++++++++++++
 
 Vault-redirector will respond to a request path of /vault-redirector-health with
-a HTTP 200 and a JSON body something like the following; this can be used for
-load balancer health checks.
+a JSON body something like the following; this can be used for load balancer
+health checks. If the active vault instance is known, the HTTP status code will
+be 200. Otherwise (i.e. if there is no active vault node or if Consul is unreachable)
+it will be a 503.
 
 .. code-block:: json
 
@@ -200,7 +202,8 @@ load balancer health checks.
       "application": "vault-redirector",
       "version": "0.1.0",
       "consul_host_port": "127.0.0.1:8500",
-      "source": "https://github.com/manheim/vault-redirector-twisted"
+      "source": "https://github.com/manheim/vault-redirector-twisted",
+      "active_vault": "vault_hostname_or_ip:port"
     }
 
 Logging and Debugging
