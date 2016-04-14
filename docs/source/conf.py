@@ -293,12 +293,7 @@ intersphinx_mapping = {
 }
 
 autoclass_content = 'class'
-autodoc_default_flags = ['members', 'undoc-members', 'private-members', 'special-members', 'show-inheritance']
-
-nitpick_ignore = [
-    ('py:class', 'ABCMeta'),
-    ('py:obj', 'function')
-]
+autodoc_default_flags = ['members', 'undoc-members', 'private-members', 'show-inheritance']
 
 linkcheck_ignore = [
     r'https?://landscape\.io.*',
@@ -306,7 +301,8 @@ linkcheck_ignore = [
     r'https?://.*\.readthedocs\.org.*',
     r'https?://codecov\.io.*',
     r'https?://.*readthedocs\.org.*',
-    r'^https://pypi\.python\.org/pypi/vault-redirector.*'
+    r'https?://pypi\.python\.org/.*',
+    r'https?://testpypi\.python\.org/.*',
 ]
 
 # exclude module docstrings - see http://stackoverflow.com/a/18031024/211734

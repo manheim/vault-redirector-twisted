@@ -1,14 +1,38 @@
 vault-redirector-twisted
 ========================
 
-Python/Twisted application to redirect `Hashicorp Vault <https://www.vaultproject.io/>`_ client requests to the active node in a HA cluster.
+Python/Twisted application to redirect Hashicorp Vault client requests to the active node in a HA cluster.
 
-**NOTE:** My initial plan was to implement this in Go. My Go knowledge is severely lacking, and the performance of Python/Twisted at 1,000 requests per second is within 25% of the Go variant. Please consider this package to be temporary, until work on the Go version (`https://github.com/manheim/vault-redirector <https://github.com/manheim/vault-redirector>`_) continues.
+.. image:: https://img.shields.io/pypi/v/vault-redirector.svg
+   :target: https://pypi.python.org/pypi/vault-redirector
+   :alt: PyPi package version
+
+.. image:: https://img.shields.io/github/issues/manheim/vault-redirector-twisted.svg
+   :alt: GitHub Open Issues
+   :target: https://github.com/manheim/vault-redirector-twisted/issues
+
+.. image:: http://www.repostatus.org/badges/latest/wip.svg
+   :alt: Project Status: WIP – Initial development is in progress, but there has not yet been a stable, usable release suitable for the public.
+   :target: http://www.repostatus.org/#wip
+
+.. image:: https://secure.travis-ci.org/manheim/vault-redirector-twisted.png?branch=master
+   :target: http://travis-ci.org/manheim/vault-redirector-twisted
+   :alt: travis-ci for master branch
+
+.. image:: https://codecov.io/github/manheim/vault-redirector-twisted/coverage.svg?branch=master
+   :target: https://codecov.io/github/manheim/vault-redirector-twisted?branch=master
+   :alt: coverage report for master branch
+
+.. image:: https://readthedocs.org/projects/vault-redirector-twisted/badge/?version=latest
+   :target: https://readthedocs.org/projects/vault-redirector-twisted/?badge=latest
+   :alt: sphinx documentation for latest release
 
 Status
 ------
 
 This application is currently very young. Please ensure it meets your needs before using it in production.
+
+**NOTE:** My initial plan was to implement this in Go. My Go knowledge is severely lacking, and the performance of Python/Twisted at 1,000 requests per second is within 25% of the Go variant. Please consider this package to be temporary, until work on the Go version (`https://github.com/manheim/vault-redirector <https://github.com/manheim/vault-redirector>`_) continues.
 
 Purpose
 -------
@@ -37,15 +61,9 @@ We take advantage of Vault's 307 redirects (and the assumption that any protocol
 Requirements
 ------------
 
-1. Python >= 2.7, 3.3+ with ``pip``
-2. `virtualenv <https://virtualenv.pypa.io/en/latest/>`_ is recommended.
-3. The `requests <http://docs.python-requests.org/en/master/>`_ library (will be installed automatically via ``pip``).
-4. `Consul <https://www.consul.io/>`_ running and configured with service checks for Vault (see below)
-
-**Note** that Twisted does not yet (April 2016) have full Python 3 compatibility. Per
-`Twisted's python3 plan <https://twistedmatrix.com/trac/wiki/Plan/Python3#Details>`_
-it appears that all modules we use are done, and both unit and manual tests under Python
-3.5 work. Please note, however, that Twisted is not officially supported on Python3.
+1. Python 2.7, 3.3, 3.4 or 3.5 and ``pip``; `virtualenv <https://virtualenv.pypa.io/en/latest/>`_ is recommended.
+2. The `requests <http://docs.python-requests.org/en/master/>`_ library (will be installed automatically via ``pip``).
+3. `Consul <https://www.consul.io/>`_ running and configured with service checks for Vault (see below)
 
 Consul Service Checks
 ++++++++++++++++++++++
@@ -203,26 +221,129 @@ by sending SIGUSR2 to the process.
 Support
 -------
 
-Please open any issues or feature requests in the `manheim/vault-redirector-twisted GitHub issue tracker<https://github.com/manheim/vault-redirector-twisted/issues>`_  They will be dealt with as time allows. Please include as much detail as possible, including your version of ``vault-redirector`` and the Python version and OS/distribution it's running on, as well as the command line arguments used when running it. Debug-level logs will likely be very helpful.
+Please open any issues or feature requests in the `manheim/vault-redirector-twisted GitHub issue tracker <https://github.com/manheim/vault-redirector-twisted/issues>`_  They will be dealt with as time allows. Please include as much detail as possible, including your version of ``vault-redirector`` and the Python version and OS/distribution it's running on, as well as the command line arguments used when running it. Debug-level logs will likely be very helpful.
 
 Development
 -----------
 
-Pull requests are welcome. Please cut them against the ``master`` branch of the `manheim/vault-redirector-twisted <https://github.com/manheim/vault-redirector-twisted>`_ repository. It is expected that test coverage increase or stay the same, and that all tests pass.
+Pull requests are welcome. Please cut them against the ``master`` branch of the `manheim/vault-redirector-twisted <https://github.com/manheim/vault-redirector-twisted>`_ repository.
+
+It is expected that test coverage increase or stay the same, that all tests pass,
+that any new code have complete test coverage, and that code conforms to `pep8 <https://www.python.org/dev/peps/pep-0008/>`_ and passes `pyflakes <https://pypi.python.org/pypi/pyflakes>`_.
+
+After making any changes to the code, before submitting a pull request, run ``tox -e docs`` to regenerate the API documentation. Commit any changes to the auto-generated files under ``docs/source``.
+
+Installing for Development
+++++++++++++++++++++++++++
+
+1. Fork the `manheim/vault-redirector-twisted <https://github.com/manheim/vault-redirector-twisted>`_ repository on GitHub.
+
+2. Clone your fork somewhere on your local machine and ``cd`` to the clone:
+
+.. code-block:: bash
+
+    $ git clone git@github.com:YOUR-GITHUB-USER/vault-redirector-twisted.git
+    $ cd vault-redirector-twisted
+
+3. Add the manheim upstream repository as a git upstream, so you can pull in
+   upstream changes, and fetch it:
+
+.. code-block:: bash
+
+    $ git remote add upstream https://github.com/manheim/vault-redirector-twisted.git
+    $ git fetch upstream
+
+4. Create a virtualenv for testing and running vault-redirector, install
+   your local source into it, and install ``tox`` for testing:
+
+.. code-block:: bash
+
+    $ virtualenv .
+    $ source bin/activate
+    $ pip install -e .
+    $ pip install tox
+
+5. Check out a new git branch. If you're working on a GitHub issue you opened, your
+   branch should be called "issues/N" where N is the issue number.
 
 Testing
--------
++++++++
 
 Testing is accomplished via `pytest <http://pytest.org/latest/>`_ and
 `tox <http://tox.readthedocs.org/en/latest/>`_. By default tests will be run
-for Python 2.7, 3.3, 3.4. 3.5 and the documentation. To run tests locally, use ``tox`` per its documentation (i.e. ``tox -e py27-unit`` to run the Python 2.7 unit tests or ``tox -e py27-acceptance`` for the acceptance tests).
+for Python 2.7, 3.3, 3.4. 3.5 and the documentation. Each supported Python interpreter has two test suites, ``unit`` and ``acceptance``. The ``acceptance`` suite will actually run vault redirector bound to an available port (but with the Consul active node query code mocked out) and make example HTTP requests against it.
 
-Automated testing is accomplished via TravisCI.
+To run the tests locally, with your virtualenv activated, run ``tox -e py<version>-(unit|acceptance)`` where ``<version>`` is one of the Python versions in ``tox.ini`` (i.e. "27", "33", "34" or "35"). You will need to already have the appropriate Python interpreter version installed on your system. When the tests are run locally, coverage reports will be generated in the ``htmlcov/`` directory.
+
+To generate documentation locally, run ``tox -e docs``; the HTML output will be in ``docs/build/html``. This must be done after making any code changes, and any changes to the auto-generated files under ``docs/source/`` must be committed.
+
+Automated testing is accomplished via TravisCI (it's free for any open source project). If you have a TravisCI account linked to your GitHub, you should be able to add your fork for automated testing without any changes to the repository.
+
+Maintenance
+-----------
+
+Instructions for repository maintainers follow:
+
+Fixing Issues / Making Changes
+++++++++++++++++++++++++++++++
+
+Note that all commit messages should be of the form ``issue #<ISSUE_NUM>: <descriptive message>``. When you've verified that the issue is fixed and update ``CHANGES.rst``, your final commit message should be of the form ``fixes #<ISSUE_NUM>: <descriptive message>``.
+
+1. Follow the instructions above for installing for development.
+2. Cut a new branch named after the GitHub issue ("issues/ISSUE_NUMBER").
+3. Make your code changes as needed, and write or update tests. It's preferred that you commit early and often, to make it easier to isolated work that needs improvements.
+4. Run tests locally at least for py27 and py35: ``tox -e py27-unit,py27-acceptance,py35-unit,py35-acceptance``
+5. Examine the test results and the coverage reports in ``htmlcov/`` (the reports will be written for the last-run unit test suite). Iterate until you have full coverage and passing tests.
+6. Run ``tox -e docs`` to generate documentation locally. Examine it for correctness, and commit any changes to the auto-generated files under ``docs/source/``.
+7. Update ``CHANGES.rst`` with a description of your change and a link to the GitHub issue. Commit that.
+8. Push your branch to origin. If you believe it's ready, open a pull request for it.
+
+Handling PRs
+++++++++++++
+
+1. Ensure that all Travis tests are passing for the PR, and that code coverage is still 100% (for all Python versions).
+2. Check out the pull request locally. To do this simply, you can edit ``.git/config`` in your clone of the repository, and under the ``[remote "origin"]`` section add the following lines. Then ``git fetch origin`` and you can check out PRs locally like ``git checkout refs/pull/origin/PR_NUM``. Note that this will be read-only.
+
+.. code-block:: ini
+
+    fetch = +refs/pull/*/head:refs/pull/origin/*
+
+3. Run ``tox -e docs`` and ensure there are no changes to the auto-generated docs and that they look correct.
+4. Ensure there is an appropriate ``CHANGES.rst`` entry for the changes.
+5. Ensure that ``README.rst``, if it has been changed, renders correctly on GitHub.
+6. If there are any changes to the local repository, cut a new branch locally, commit them, and push it to your fork. You can either ask the original PR author to pull in your changes, or you can close their PR and open a new one for your branch (be sure to reference the closed PR in a comment).
+7. Merge the PR to master.
 
 Release Process
----------------
++++++++++++++++
 
-TODO.
+1. Open an issue for the release; cut a branch off ``master`` for that issue.
+2. Build docs (``tox -e docs``) and ensure they look correct. Commit any changes to the auto-generated files.
+3. Ensure that Travis tests are passing in all environments.
+4. Ensure that test coverage is no less than the last release (ideally, 100%).
+5. Ensure there are entries in ``CHANGES.rst`` for all changes since the last release, and that they link to the GitHub issues.
+6. Increment the version number in ``vault_redirector/version.py`` and add version and release date to CHANGES.rst. Mention the issue in the commit for this, and push to GitHub.
+7. Confirm that README.rst renders correctly on GitHub.
+8. Upload package to testpypi and confirm that README.rst renders correctly.
+
+   * Make sure your ~/.pypirc file is correct (a repo called ``test`` for https://testpypi.python.org/pypi) and that you have ``twine`` installed in your virtualenv. Then:
+   * ``rm -Rf dist``
+   * ``python setup.py register -r https://testpypi.python.org/pypi``
+   * ``python setup.py sdist bdist_wheel``
+   * ``twine upload -r test dist/*``
+   * Check that the README renders at https://testpypi.python.org/pypi/vault-redirector
+
+9. Create a pull request for the release to be merge into master. Upon successful Travis build, merge it.
+10. Tag the release in Git, push tag to GitHub:
+
+   * tag the release. for now the message is quite simple: ``git tag -a X.Y.Z -m 'X.Y.Z released YYYY-MM-DD'``
+   * push the tag to GitHub: ``git push origin X.Y.Z``
+
+11. Upload package to live pypi:
+
+    * ``twine upload dist/*``
+
+12. make sure any GH issues fixed in the release were closed.
 
 License
 -------
