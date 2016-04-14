@@ -27,6 +27,8 @@ Python/Twisted application to redirect Hashicorp Vault client requests to the ac
    :target: https://readthedocs.org/projects/vault-redirector-twisted/?badge=latest
    :alt: sphinx documentation for latest release
 
+API Documentation: `http://vault-redirector-twisted.readthedocs.org/en/latest/ <http://vault-redirector-twisted.readthedocs.org/en/latest/>`_
+
 Status
 ------
 
@@ -94,7 +96,7 @@ Here is example of the `Consul service definition <https://www.consul.io/docs/ag
 Installation
 ------------
 
-We recommend installing inside an isolated virtualenv. If you don't want to do that, please adjust the instructions as required:
+We recommend installing inside an isolated virtualenv. If you don't want to do that and would rather install system-wide, simply skip to the last step:
 
 1. ``virtualenv vault``
 2. ``source vault/bin/activate``
@@ -191,11 +193,11 @@ load balancer health checks.
 .. code-block:: json
 
     {
-      'healthy': True,
-      'application': 'vault-redirector',
-      'source': '(string, project source URL)',
-      'version': '(string, current vault-redirector version)',
-      'consul_host_port': '(string, consul host:port being polled)'
+      "healthy": true,
+      "application": "vault-redirector",
+      "version": "0.1.0",
+      "consul_host_port": "127.0.0.1:8500",
+      "source": "https://github.com/manheim/vault-redirector-twisted"
     }
 
 Logging and Debugging
