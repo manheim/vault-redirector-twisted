@@ -373,6 +373,9 @@ class TestVaultRedirector(object):
 class TestVaultRedirectorSite(object):
 
     def setup(self):
+        self.empty_resp = ''
+        if sys.version_info[0] >= 3:
+            self.empty_resp = b''
         self.mock_redir = Mock(spec_set=VaultRedirector)
         type(self.mock_redir).active_node_ip_port = 'consul:1234'
         type(self.mock_redir).log_enabled = True
@@ -424,7 +427,7 @@ class TestVaultRedirectorSite(object):
             call.setHeader('Location', expected_location),
             call.setHeader("Content-Type", "text/html; charset=UTF-8")
         ]
-        assert resp == ''
+        assert resp == self.empty_resp
         assert mock_logger.mock_calls == [
             call.info('RESPOND 307 to %s for %s%s request for %s from %s:%s',
                       expected_location, '', 'GET', '/foo/bar', '1.2.3.4',
@@ -447,7 +450,7 @@ class TestVaultRedirectorSite(object):
             call.setHeader('Location', expected_location),
             call.setHeader("Content-Type", "text/html; charset=UTF-8")
         ]
-        assert resp == ''
+        assert resp == self.empty_resp
         assert mock_logger.mock_calls == [
             call.info('RESPOND 307 to %s for %s%s request for %s from %s:%s',
                       expected_location, 'QUEUED ', 'GET', '/foo/bar',
@@ -470,7 +473,7 @@ class TestVaultRedirectorSite(object):
             call.setHeader('Location', expected_location),
             call.setHeader("Content-Type", "text/html; charset=UTF-8")
         ]
-        assert resp == ''
+        assert resp == self.empty_resp
         assert mock_logger.mock_calls == []
 
     def test_render_503(self):

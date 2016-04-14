@@ -279,7 +279,7 @@ class VaultRedirectorSite(object):
         :rtype: str
         """
         path = request.uri
-        if not isinstance(path, str):
+        if not isinstance(path, str):  # nocoverage - py3 only
             path = path.decode('utf-8')
         twisted_server = request.responseHeaders.getRawHeaders(
             'server', 'Twisted'
