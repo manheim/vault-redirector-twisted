@@ -243,13 +243,17 @@ class VaultRedirectorSite(object):
         :type redirector: :py:class:`~.VaultRedirector` instance
         """
         self.redirector = redirector
-        self.status_response = json.dumps({
+
+    def status_response(self):
+        s = json.dumps({
             'healthy': True,
             'application': 'vault-redirector',
             'source': _PROJECT_URL,
             'version': _VERSION,
-            'consul_host_port': self.redirector.consul_host_port
+            'consul_host_port': self.redirector.consul_host_port,
+            'active_vault': self.redirector.active_node_ip_port
         })
+        return s
 
     def getChildWithDefault(self, name, request):
         """
@@ -320,7 +324,7 @@ class VaultRedirectorSite(object):
         # the health check URL, serve it (200)
         if path == '/vault-redirector-health':
             request.setHeader("Content-Type", 'application/json')
-            return self.make_response(self.status_response)
+            return self.make_response(self.status_response())
         # figure out redirect path
         redir_to = '%s://%s%s' % (
             self.redirector.consul_scheme,

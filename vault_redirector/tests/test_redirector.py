@@ -399,13 +399,6 @@ class TestVaultRedirectorSite(object):
         cls = VaultRedirectorSite(self.mock_redir)
         assert cls.redirector == self.mock_redir
         assert cls.isLeaf is True
-        assert json.loads(cls.status_response) == {
-            'healthy': True,
-            'application': 'vault-redirector',
-            'source': _PROJECT_URL,
-            'version': _VERSION,
-            'consul_host_port': 'consul:5678'
-        }
 
     def test_getChildWithDefault(self):
         res = self.cls.getChildWithDefault(None, None)
@@ -562,14 +555,27 @@ class TestVaultRedirectorSite(object):
         self.mock_request.reset_mock()
 
         with patch('%s.logger' % pbm) as mock_logger:
-            self.cls.status_response = 'foobar'
-            resp = self.cls.render(self.mock_request)
+            with patch('%s.VaultRedirectorSite.status_response' % pbm
+                       ) as mock_status:
+                mock_status.return_value = 'foobar'
+                resp = self.cls.render(self.mock_request)
         assert self.mock_request.mock_calls == [
             call.setHeader('server', expected_server),
             call.setHeader("Content-Type", "application/json")
         ]
         assert resp == expected
         assert mock_logger.mock_calls == []
+
+    def test_status_response(self):
+        res = self.cls.status_response()
+        assert json.loads(res) == {
+            'healthy': True,
+            'application': 'vault-redirector',
+            'source': _PROJECT_URL,
+            'version': _VERSION,
+            'consul_host_port': 'consul:5678',
+            'active_vault': 'mynode:1234'
+        }
 
 
 class TestVaultRedirectorAcceptance(object):
