@@ -11,9 +11,9 @@ Python/Twisted application to redirect Hashicorp Vault client requests to the ac
    :alt: GitHub Open Issues
    :target: https://github.com/manheim/vault-redirector-twisted/issues
 
-.. image:: http://www.repostatus.org/badges/latest/wip.svg
-   :alt: Project Status: WIP – Initial development is in progress, but there has not yet been a stable, usable release suitable for the public.
-   :target: http://www.repostatus.org/#wip
+.. image:: http://www.repostatus.org/badges/latest/active.svg
+   :alt: Project Status: Active – The project has reached a stable, usable state and is being actively developed.
+   :target: http://www.repostatus.org/#active
 
 .. image:: https://secure.travis-ci.org/manheim/vault-redirector-twisted.png?branch=master
    :target: http://travis-ci.org/manheim/vault-redirector-twisted
@@ -102,9 +102,9 @@ Installation
 We recommend installing inside an isolated virtualenv. If you don't want to do that and would rather install system-wide, simply skip to the last two steps:
 
 1. Ensure that ``gcc`` or another suitable C compiler is installed.
-1. ``virtualenv vault``
-2. ``source vault/bin/activate``
-3. ``pip install vault-redirector``; if you wish to use TLS for incoming connections (highly recommended) you'll also need the ``pyOpenSSL`` and ``pem`` packages, which will be installed automatically if you instead run ``pip install vault-redirector[tls]``
+2. ``virtualenv vault``
+3. ``source vault/bin/activate``
+4. ``pip install vault-redirector``; if you wish to use TLS for incoming connections (highly recommended) you'll also need the ``pyOpenSSL`` and ``pem`` packages, which will be installed automatically if you instead run ``pip install vault-redirector[tls]``
 
 Usage
 -----

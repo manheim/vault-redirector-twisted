@@ -14,9 +14,9 @@ Python/Twisted application to redirect Hashicorp Vault client requests to the ac
    :alt: GitHub Open Issues
    :target: https://github.com/manheim/vault-redirector-twisted/issues
 
-.. image:: http://www.repostatus.org/badges/latest/wip.svg
-   :alt: Project Status: WIP – Initial development is in progress, but there has not yet been a stable, usable release suitable for the public.
-   :target: http://www.repostatus.org/#wip
+.. image:: http://www.repostatus.org/badges/latest/active.svg
+   :alt: Project Status: Active – The project has reached a stable, usable state and is being actively developed.
+   :target: http://www.repostatus.org/#active
 
 .. image:: https://secure.travis-ci.org/manheim/vault-redirector-twisted.png?branch=master
    :target: http://travis-ci.org/manheim/vault-redirector-twisted
@@ -67,8 +67,11 @@ Requirements
 ------------
 
 1. Python 2.7, 3.3, 3.4 or 3.5 and ``pip``; `virtualenv <https://virtualenv.pypa.io/en/latest/>`_ is recommended.
-2. The `requests <http://docs.python-requests.org/en/master/>`_ library (will be installed automatically via ``pip``).
-3. `Consul <https://www.consul.io/>`_ running and configured with service checks for Vault (see below)
+2. ``gcc`` or another suitable C compiler and the python headers/development package for your OS; the ``twisted`` package has dependencies with native extensions which must be compiled at install time.
+3. The `twisted <https://pypi.python.org/pypi/Twisted>`_ package (will be installed automatically via ``pip``).
+4. The `requests <https://pypi.python.org/pypi/requests>`_ package (will be installed automatically via ``pip``).
+5. If you wish to use TLS for incoming connections (highly recommended), the `pyOpenSSL <https://pypi.python.org/pypi/pyOpenSSL>`_ and `pem <https://pypi.python.org/pypi/pem>`_ packages. These can be automatically installed along with vault-redirector by using ``pip install vault-redirector[tls]``.
+6. `Consul <https://www.consul.io/>`_ running and configured with service checks for Vault (see below)
 
 Consul Service Checks
 ++++++++++++++++++++++
@@ -99,11 +102,12 @@ Here is example of the `Consul service definition <https://www.consul.io/docs/ag
 Installation
 ------------
 
-We recommend installing inside an isolated virtualenv. If you don't want to do that and would rather install system-wide, simply skip to the last step:
+We recommend installing inside an isolated virtualenv. If you don't want to do that and would rather install system-wide, simply skip to the last two steps:
 
-1. ``virtualenv vault``
-2. ``source vault/bin/activate``
-3. ``pip install vault-redirector``
+1. Ensure that ``gcc`` or another suitable C compiler is installed.
+2. ``virtualenv vault``
+3. ``source vault/bin/activate``
+4. ``pip install vault-redirector``; if you wish to use TLS for incoming connections (highly recommended) you'll also need the ``pyOpenSSL`` and ``pem`` packages, which will be installed automatically if you instead run ``pip install vault-redirector[tls]``
 
 Usage
 -----
@@ -148,6 +152,18 @@ By default, ``vault-redirector`` will redirect clients to the hostname (Consul
 health check **node name**) of the active Vault node, over plain HTTP. This can
 be changed via the ``-I | --ip`` and ``-S | --https`` options.
 
+Usage with TLS
++++++++++++++++
+
+vault-redirector is capable of listening with TLS/HTTPS, which is strongly
+recommended as clients will send their authentication tokens as HTTP headers.
+To do so, specify the ``-k|--key-path`` and ``-c|--cert-path`` options with the
+paths to the key and certificate files, respectively. Each should be a
+PEM-encoded file; if your certificate requires a trust/CA chain to be presented
+to clients, the file at ``cert-path`` should be a combined certificate and chain
+file, composed of the PEM-encoded certificate concatenated with one or more PEM-encoded
+chain certificates.
+
 Running as a Daemon / Service
 +++++++++++++++++++++++++++++
 
@@ -158,8 +174,9 @@ operating system.
 Here is an example `systemd <https://www.freedesktop.org/wiki/Software/systemd/>`_
 service unit file for ``vault-redirector``, assuming you wish to run it as a
 ``vaultredirector`` user and group, and it is installed into a virtualenv at
-``/home/vaultredirector/venv``, and Consul is running on localhost (127.0.0.1)
-on port 8500.
+``/usr/local/vault-redirector``, and Consul is running on localhost (127.0.0.1)
+on port 8500. This will start the service with logging disabled (``-l``) but set
+to INFO level (``-v``); logging can be turned on with SIGUSR1 as described below.
 
 .. code-block:: ini
 
@@ -169,6 +186,7 @@ on port 8500.
     After=basic.target network.target
 
     [Service]
+    Type=simple
     User=vaultredirector
     Group=vaultredirector
     PrivateDevices=yes
@@ -177,21 +195,31 @@ on port 8500.
     ProtectHome=read-only
     CapabilityBoundingSet=
     NoNewPrivileges=yes
-    ExecStart=/home/vaultredirector/venv/bin/vault-redirector 127.0.0.1:8500
+    ExecStart=/usr/local/vault-redirector/bin/vault-redirector -v -l 127.0.0.1:8500
+    RestartSec=5s
     TimeoutStopSec=30s
-    Restart=on-failure
-    StartLimitInterval=10s
-    StartLimitBurst=10
+    Restart=always
+    # disable all rate limiting; let it restart forever
+    StartLimitInterval=0
 
     [Install]
     WantedBy=multi-user.target
+
+If you wish to both use TLS for incoming connections and redirect to a HTTPS URL for Vault,
+the ``ExecStart`` line would be:
+
+.. code-block:: ini
+
+    ExecStart=/usr/local/vault-redirector/bin/vault-redirector -v -l -S --cert-path=/path/to/server.crt --key-path=/path/to/server.key 127.0.0.1:8500
 
 Health Check
 ++++++++++++
 
 Vault-redirector will respond to a request path of /vault-redirector-health with
-a HTTP 200 and a JSON body something like the following; this can be used for
-load balancer health checks.
+a JSON body something like the following; this can be used for load balancer
+health checks. If the active vault instance is known, the HTTP status code will
+be 200. Otherwise (i.e. if there is no active vault node or if Consul is unreachable)
+it will be a 503.
 
 .. code-block:: json
 
@@ -200,7 +228,8 @@ load balancer health checks.
       "application": "vault-redirector",
       "version": "0.1.0",
       "consul_host_port": "127.0.0.1:8500",
-      "source": "https://github.com/manheim/vault-redirector-twisted"
+      "source": "https://github.com/manheim/vault-redirector-twisted",
+      "active_vault": "vault_hostname_or_ip:port"
     }
 
 Logging and Debugging
@@ -266,7 +295,7 @@ Installing for Development
     $ virtualenv .
     $ source bin/activate
     $ pip install -e .
-    $ pip install tox
+    $ pip install tox pyOpenSSL pem
 
 5. Check out a new git branch. If you're working on a GitHub issue you opened, your
    branch should be called "issues/N" where N is the issue number.
