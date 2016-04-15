@@ -23,6 +23,8 @@ matrix:
       env: TOXENV=py35-unit PIP_DOWNLOAD_CACHE=$HOME/.pip-cache
     - python: "3.5"
       env: TOXENV=py35-acceptance PIP_DOWNLOAD_CACHE=$HOME/.pip-cache
+    - python: "2.7"
+      env: TOXENV=cidocs PIP_DOWNLOAD_CACHE=$HOME/.pip-cache
 
 install:
   - git config --global user.email "travisci@manheim.com"
