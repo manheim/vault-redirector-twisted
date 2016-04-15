@@ -121,7 +121,8 @@ All options and configuration are passed in via command-line options.
 
     jantman@exodus$ vault-redirector -h
     usage: vault-redirector [-h] [-v] [-l] [-V] [-S] [-I] [-p POLL_INTERVAL]
-                            [-P BIND_PORT] [-c CHECKID]
+                            [-P BIND_PORT] [-C CHECKID] [-c CERT_PATH]
+                            [-k KEY_PATH]
                             CONSUL_HOST_PORT
 
     Python/Twisted application to redirect Hashicorp Vault client requests to the
@@ -144,9 +145,18 @@ All options and configuration are passed in via command-line options.
                             (default 5.0)
       -P BIND_PORT, --port BIND_PORT
                             Port number to listen on (default 8080)
-      -c CHECKID, --checkid CHECKID
+      -C CHECKID, --checkid CHECKID
                             Consul service CheckID for Vault (default:
                             "service:vault"
+      -c CERT_PATH, --cert-path CERT_PATH
+                            Path to PEM-encoded TLS certificate. If you need a
+                            certificate chain to verify trust, this file should be
+                            composed of the server certificate followed by one or
+                            more chain certificates. If specified, you must also
+                            specify -k|--key-path
+      -k KEY_PATH, --key-path KEY_PATH
+                            Path to PEM-encoded TLS private key. If specified, you
+                            must also specify -c|--cert-path
 
 By default, ``vault-redirector`` will redirect clients to the hostname (Consul
 health check **node name**) of the active Vault node, over plain HTTP. This can

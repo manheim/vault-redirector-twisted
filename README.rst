@@ -118,7 +118,8 @@ All options and configuration are passed in via command-line options.
 
     jantman@exodus$ vault-redirector -h
     usage: vault-redirector [-h] [-v] [-l] [-V] [-S] [-I] [-p POLL_INTERVAL]
-                            [-P BIND_PORT] [-c CHECKID]
+                            [-P BIND_PORT] [-C CHECKID] [-c CERT_PATH]
+                            [-k KEY_PATH]
                             CONSUL_HOST_PORT
 
     Python/Twisted application to redirect Hashicorp Vault client requests to the
@@ -141,9 +142,18 @@ All options and configuration are passed in via command-line options.
                             (default 5.0)
       -P BIND_PORT, --port BIND_PORT
                             Port number to listen on (default 8080)
-      -c CHECKID, --checkid CHECKID
+      -C CHECKID, --checkid CHECKID
                             Consul service CheckID for Vault (default:
                             "service:vault"
+      -c CERT_PATH, --cert-path CERT_PATH
+                            Path to PEM-encoded TLS certificate. If you need a
+                            certificate chain to verify trust, this file should be
+                            composed of the server certificate followed by one or
+                            more chain certificates. If specified, you must also
+                            specify -k|--key-path
+      -k KEY_PATH, --key-path KEY_PATH
+                            Path to PEM-encoded TLS private key. If specified, you
+                            must also specify -c|--cert-path
 
 By default, ``vault-redirector`` will redirect clients to the hostname (Consul
 health check **node name**) of the active Vault node, over plain HTTP. This can
@@ -322,7 +332,7 @@ Note that all commit messages should be of the form ``issue #<ISSUE_NUM>: <descr
 
 1. Follow the instructions above for installing for development.
 2. Cut a new branch named after the GitHub issue ("issues/ISSUE_NUMBER").
-3. Make your code changes as needed, and write or update tests. It's preferred that you commit early and often, to make it easier to isolated work that needs improvements.
+3. Make your code changes as needed, and write or update tests. It's preferred that you commit early and often, to make it easier to isolate work that needs improvements.
 4. Run tests locally at least for py27 and py35: ``tox -e py27-unit,py27-acceptance,py35-unit,py35-acceptance``
 5. Examine the test results and the coverage reports in ``htmlcov/`` (the reports will be written for the last-run unit test suite). Iterate until you have full coverage and passing tests.
 6. Run ``tox -e docs`` to generate documentation locally. Examine it for correctness, and commit any changes to the auto-generated files under ``docs/source/``.
