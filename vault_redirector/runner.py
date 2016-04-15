@@ -93,9 +93,19 @@ class Runner(object):
         p.add_argument('-P', '--port', dest='bind_port', action='store',
                        type=int, default=8080,
                        help='Port number to listen on (default 8080)')
-        p.add_argument('-c', '--checkid', dest='checkid', action='store',
+        p.add_argument('-C', '--checkid', dest='checkid', action='store',
                        type=str, default='service:vault', help='Consul service '
                        'CheckID for Vault (default: "service:vault"')
+        p.add_argument('-c', '--cert-path', dest='cert_path', type=str,
+                       action='store', help='Path to PEM-encoded TLS '
+                       'certificate. If you need a certificate chain to verify'
+                       ' trust, this file should be composed of the server '
+                       'certificate followed by one or more chain certificates.'
+                       ' If specified, you must also specify -k|--key-path')
+        p.add_argument('-k', '--key-path', dest='key_path', type=str,
+                       action='store', help='Path to PEM-encoded TLS private '
+                       'key. If specified, you must also specify '
+                       '-c|--cert-path')
         p.add_argument('CONSUL_HOST_PORT', action='store', type=str,
                        help='Consul address in host:port form')
         args = p.parse_args(argv)
@@ -103,6 +113,13 @@ class Runner(object):
         if not re.match(r'^.*:\d+$', args.CONSUL_HOST_PORT):
             sys.stderr.write('ERROR: CONSUL_HOST_PORT must be in host:port '
                              "or ip:port format\n")
+            raise SystemExit(1)
+
+        if (args.cert_path and not args.key_path) or (
+                args.key_path and not args.cert_path
+        ):
+            sys.stderr.write("ERROR: -k|--key-path and -c|--cert-path must "
+                             "be specified together\n")
             raise SystemExit(1)
 
         return args
@@ -122,7 +139,9 @@ class Runner(object):
             log_disable=args.log_disable,
             poll_interval=args.poll_interval,
             bind_port=args.bind_port,
-            check_id=args.checkid
+            check_id=args.checkid,
+            key_path=args.key_path,
+            cert_path=args.cert_path
         )
         redir.run()
 

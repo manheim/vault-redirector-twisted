@@ -82,10 +82,12 @@ class TestVaultRedirector(object):
 
     def test_init(self):
         with patch('%s.setup_signal_handlers' % pb) as mock_setup_signals:
-            with patch('%s.logger' % pbm) as mock_logger:
-                cls = VaultRedirector('consul:123')
+            with patch('%s.get_tls_factory' % pb) as mock_get_tls:
+                with patch('%s.logger' % pbm) as mock_logger:
+                    cls = VaultRedirector('consul:123')
         assert mock_setup_signals.mock_calls == [call()]
         assert mock_logger.mock_calls == []
+        assert mock_get_tls.mock_calls == []
         assert cls.active_node_ip_port is None
         assert cls.consul_host_port == 'consul:123'
         assert cls.redir_https is False
@@ -95,21 +97,23 @@ class TestVaultRedirector(object):
         assert cls.bind_port == 8080
         assert cls.check_id == 'service:vault'
         assert cls.consul_scheme == 'http'
+        assert cls.tls_factory is None
 
     def test_init_nondefault(self):
         with patch('%s.setup_signal_handlers' % pb) as mock_setup_signals:
-            with patch('%s.logger' % pbm) as mock_logger:
-                with patch('%s.getpid' % pbm) as mock_getpid:
-                    mock_getpid.return_value = 12345
-                    cls = VaultRedirector(
-                        'consul:123',
-                        redir_to_https=True,
-                        redir_to_ip=True,
-                        log_disable=True,
-                        poll_interval=1.234,
-                        bind_port=1234,
-                        check_id='foo:bar'
-                    )
+            with patch('%s.get_tls_factory' % pb) as mock_get_tls:
+                with patch('%s.logger' % pbm) as mock_logger:
+                    with patch('%s.getpid' % pbm) as mock_getpid:
+                        mock_getpid.return_value = 12345
+                        cls = VaultRedirector(
+                            'consul:123',
+                            redir_to_https=True,
+                            redir_to_ip=True,
+                            log_disable=True,
+                            poll_interval=1.234,
+                            bind_port=1234,
+                            check_id='foo:bar'
+                        )
         assert mock_setup_signals.mock_calls == [call()]
         assert mock_logger.mock_calls == [
             call.warning(
@@ -118,6 +122,7 @@ class TestVaultRedirector(object):
                 12345
             )
         ]
+        assert mock_get_tls.mock_calls == []
         assert cls.active_node_ip_port is None
         assert cls.consul_host_port == 'consul:123'
         assert cls.redir_https is True
@@ -128,6 +133,56 @@ class TestVaultRedirector(object):
         assert cls.check_id == 'foo:bar'
         assert cls.consul_scheme == 'https'
 
+    def test_init_cert_no_key(self):
+        with patch('%s.setup_signal_handlers' % pb) as mock_setup_signals:
+            with patch('%s.get_tls_factory' % pb) as mock_get_tls:
+                with patch('%s.logger' % pbm) as mock_logger:
+                    with pytest.raises(RuntimeError) as excinfo:
+                        VaultRedirector('consul:123', cert_path='foo')
+        assert mock_setup_signals.mock_calls == [call()]
+        assert mock_logger.mock_calls == []
+        assert mock_get_tls.mock_calls == []
+        assert excinfo.value.args[0] == 'VaultRedirector class constructor ' \
+                                        'must either receive both cert_path ' \
+                                        'and key_path, or neither.'
+
+    def test_init_cert_no_cert(self):
+        with patch('%s.setup_signal_handlers' % pb) as mock_setup_signals:
+            with patch('%s.get_tls_factory' % pb) as mock_get_tls:
+                with patch('%s.logger' % pbm) as mock_logger:
+                    with pytest.raises(RuntimeError) as excinfo:
+                        VaultRedirector('consul:123', key_path='foo')
+        assert mock_setup_signals.mock_calls == [call()]
+        assert mock_logger.mock_calls == []
+        assert mock_get_tls.mock_calls == []
+        assert excinfo.value.args[0] == 'VaultRedirector class constructor ' \
+                                        'must either receive both cert_path ' \
+                                        'and key_path, or neither.'
+
+    def test_init_tls(self):
+        with patch('%s.setup_signal_handlers' % pb) as mock_setup_signals:
+            with patch('%s.get_tls_factory' % pb) as mock_get_tls:
+                with patch('%s.logger' % pbm) as mock_logger:
+                    cls = VaultRedirector(
+                        'consul:123',
+                        cert_path='cpath', key_path='kpath'
+                    )
+        assert mock_setup_signals.mock_calls == [call()]
+        assert mock_logger.mock_calls == []
+        assert mock_get_tls.mock_calls == [call()]
+        assert cls.active_node_ip_port is None
+        assert cls.consul_host_port == 'consul:123'
+        assert cls.redir_https is False
+        assert cls.redir_ip is False
+        assert cls.log_enabled is True
+        assert cls.poll_interval == 5.0
+        assert cls.bind_port == 8080
+        assert cls.check_id == 'service:vault'
+        assert cls.consul_scheme == 'http'
+        assert cls.cert_path == 'cpath'
+        assert cls.key_path == 'kpath'
+        assert cls.tls_factory == mock_get_tls.return_value
+
     def test_setup_signal_handlers(self):
         with patch('%s.signal.signal' % pbm) as mock_signal:
             self.cls.setup_signal_handlers()
@@ -135,6 +190,83 @@ class TestVaultRedirector(object):
             call(signal.SIGUSR1, self.cls.handle_logging_signal),
             call(signal.SIGUSR2, self.cls.handle_logging_signal),
         ]
+
+    def test_get_tls_factory(self):
+        self.cls.cert_path = '/path/to.crt'
+        self.cls.key_path = '/path/to.key'
+        with patch('%s.access' % pbm) as mock_access:
+            with patch('%s.HAVE_PYOPENSSL' % pbm, True):
+                with patch('%s.certificateOptionsFromFiles' % pbm) as mock_cof:
+                    mock_access.return_value = True
+                    res = self.cls.get_tls_factory()
+        assert mock_access.mock_calls == [
+            call('/path/to.crt', os.R_OK),
+            call('/path/to.key', os.R_OK)
+        ]
+        assert mock_cof.mock_calls == [call('/path/to.key', '/path/to.crt')]
+        assert res == mock_cof.return_value
+
+    def test_get_tls_factory_cert_unreadable(self):
+        def se_access(fpath, atype):
+            if fpath == '/path/to.crt':
+                return False
+            return True
+
+        self.cls.cert_path = '/path/to.crt'
+        self.cls.key_path = '/path/to.key'
+        with patch('%s.access' % pbm) as mock_access:
+            with patch('%s.HAVE_PYOPENSSL' % pbm, True):
+                with patch('%s.certificateOptionsFromFiles' % pbm) as mock_cof:
+                    mock_access.side_effect = se_access
+                    with pytest.raises(RuntimeError) as excinfo:
+                        self.cls.get_tls_factory()
+        assert mock_access.mock_calls == [
+            call('/path/to.crt', os.R_OK)
+        ]
+        assert excinfo.value.args[0] == 'Error: cert file at /path/to.crt is ' \
+                                        'not readable'
+        assert mock_cof.mock_calls == []
+
+    def test_get_tls_factory_key_unreadable(self):
+        def se_access(fpath, atype):
+            if fpath == '/path/to.key':
+                return False
+            return True
+
+        self.cls.cert_path = '/path/to.crt'
+        self.cls.key_path = '/path/to.key'
+        with patch('%s.access' % pbm) as mock_access:
+            with patch('%s.HAVE_PYOPENSSL' % pbm, True):
+                with patch('%s.certificateOptionsFromFiles' % pbm) as mock_cof:
+                    mock_access.side_effect = se_access
+                    with pytest.raises(RuntimeError) as excinfo:
+                        self.cls.get_tls_factory()
+        assert mock_access.mock_calls == [
+            call('/path/to.crt', os.R_OK),
+            call('/path/to.key', os.R_OK)
+        ]
+        assert excinfo.value.args[0] == 'Error: key file at /path/to.key is ' \
+                                        'not readable'
+        assert mock_cof.mock_calls == []
+
+    def test_get_tls_factory_no_pyopenssl(self):
+        self.cls.cert_path = '/path/to.crt'
+        self.cls.key_path = '/path/to.key'
+        with patch('%s.access' % pbm) as mock_access:
+            with patch('%s.HAVE_PYOPENSSL' % pbm, False):
+                with patch('%s.certificateOptionsFromFiles' % pbm) as mock_cof:
+                    mock_access.return_value = True
+                    with pytest.raises(RuntimeError) as excinfo:
+                        self.cls.get_tls_factory()
+        assert mock_access.mock_calls == [
+            call('/path/to.crt', os.R_OK),
+            call('/path/to.key', os.R_OK)
+        ]
+        assert excinfo.value.args[0] == 'Error: running with TLS (cert and ' \
+                                        'key) requires pyOpenSSL, but it does' \
+                                        ' not appear to be installed. Please ' \
+                                        '"pip install pyOpenSSL".'
+        assert mock_cof.mock_calls == []
 
     def test_handle_logging_signal_USR1(self):
         self.cls.log_enabled = False
@@ -285,6 +417,22 @@ class TestVaultRedirector(object):
         ]
         assert self.cls.reactor.mock_calls == [call.listenTCP(8080, mock_site)]
 
+    def test_listentls(self):
+        self.cls.tls_factory = Mock()
+        self.cls.reactor = Mock(spec_set=reactor)
+        mock_site = Mock()
+        with patch('%s.logger' % pbm) as mock_logger:
+            self.cls.listentls(mock_site)
+        assert mock_logger.mock_calls == [
+            call.warning(
+                'Setting TCP TLS listener on port %d for HTTPS requests',
+                8080
+            )
+        ]
+        assert self.cls.reactor.mock_calls == [
+            call.listenSSL(8080, mock_site, self.cls.tls_factory)
+        ]
+
     def test_add_update_loop(self):
         self.cls.reactor = Mock(spec_set=reactor)
         with patch('%s.LoopingCall' % pbm) as mock_looping:
@@ -313,7 +461,8 @@ class TestVaultRedirector(object):
                 get_active_node=DEFAULT,
                 run_reactor=DEFAULT,
                 listentcp=DEFAULT,
-                add_update_loop=DEFAULT
+                add_update_loop=DEFAULT,
+                listentls=DEFAULT
             ) as cls_mocks:
                 cls_mocks['get_active_node'].return_value = 'consul:1234'
                 self.cls.run()
@@ -333,6 +482,45 @@ class TestVaultRedirector(object):
             call(mod_mocks['Site'].return_value)
         ]
         assert cls_mocks['add_update_loop'].mock_calls == [call()]
+        assert cls_mocks['listentls'].mock_calls == []
+
+    def test_run_tls(self):
+        self.cls.reactor = Mock(spec_set=reactor)
+        self.cls.tls_factory = Mock()
+        with patch.multiple(
+            pbm,
+            logger=DEFAULT,
+            Site=DEFAULT,
+            LoopingCall=DEFAULT,
+            VaultRedirectorSite=DEFAULT
+        ) as mod_mocks:
+            with patch.multiple(
+                pb,
+                get_active_node=DEFAULT,
+                run_reactor=DEFAULT,
+                listentcp=DEFAULT,
+                add_update_loop=DEFAULT,
+                listentls=DEFAULT
+            ) as cls_mocks:
+                cls_mocks['get_active_node'].return_value = 'consul:1234'
+                self.cls.run()
+        assert self.cls.active_node_ip_port == 'consul:1234'
+        assert mod_mocks['logger'].mock_calls == [
+            call.warning('Initial Vault active node: %s', 'consul:1234'),
+            call.warning('Starting Twisted reactor (event loop)')
+        ]
+        assert mod_mocks['VaultRedirectorSite'].mock_calls == [call(self.cls)]
+        assert mod_mocks['Site'].mock_calls == [
+            call(mod_mocks['VaultRedirectorSite'].return_value)
+        ]
+        assert self.cls.reactor.mock_calls == []
+        assert cls_mocks['run_reactor'].mock_calls == [call()]
+        assert mod_mocks['LoopingCall'].mock_calls == []
+        assert cls_mocks['listentls'].mock_calls == [
+            call(mod_mocks['Site'].return_value)
+        ]
+        assert cls_mocks['add_update_loop'].mock_calls == [call()]
+        assert cls_mocks['listentcp'].mock_calls == []
 
     def test_run_error(self):
         self.cls.reactor = Mock(spec_set=reactor)

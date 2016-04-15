@@ -40,7 +40,7 @@ import sys
 import logging
 import signal
 import json
-from os import getpid
+from os import getpid, access, R_OK
 import requests
 from twisted.web import resource
 from twisted.web.server import Site
@@ -49,6 +49,13 @@ from twisted.internet.task import LoopingCall
 from twisted.web._responses import NOT_FOUND, SERVICE_UNAVAILABLE, OK
 from vault_redirector.version import _VERSION, _PROJECT_URL
 
+try:  # nocoverage
+    from OpenSSL import SSL  # pragma: no flakes
+    from pem.twisted import certificateOptionsFromFiles
+    HAVE_PYOPENSSL = True
+except ImportError:
+    HAVE_PYOPENSSL = False
+
 logger = logging.getLogger()
 
 
@@ -56,7 +63,8 @@ class VaultRedirector(object):
 
     def __init__(self, consul_host_port,
                  redir_to_https=False, redir_to_ip=False, log_disable=False,
-                 poll_interval=5.0, bind_port=8080, check_id='service:vault'):
+                 poll_interval=5.0, bind_port=8080, check_id='service:vault',
+                 key_path=None, cert_path=None):
         """
         Initialize the redirector service.
 
@@ -76,6 +84,12 @@ class VaultRedirector(object):
         :type bind_port: int
         :param check_id: Consul health check ID to use for Vault
         :type check_id: str
+        :param key_path: path to TLS key to use on listener; this param enables
+          TLS and must be used in combination with ``cert_path``
+        :type key_path: str
+        :param cert_path: path to TLS cert to use on listener; this param
+          enables TLS and must be used in combination with ``key_path``
+        :type cert_path: str
         """
         self.active_node_ip_port = None
         self.consul_host_port = consul_host_port
@@ -98,7 +112,47 @@ class VaultRedirector(object):
         # per the Twisted API docs, "New application code should prefer to pass
         # and accept the reactor as a parameter where it is needed, rather than
         # relying on being able to import this module to get a reference.
+        self.use_tls = False
         self.reactor = reactor
+        self.tls_factory = None
+        if (cert_path is not None and key_path is None) or (
+            cert_path is None and key_path is not None
+        ):
+            raise RuntimeError('VaultRedirector class constructor must either '
+                               'receive both cert_path and key_path, '
+                               'or neither.')
+        if cert_path is not None and key_path is not None:
+            self.cert_path = cert_path
+            self.key_path = key_path
+            self.tls_factory = self.get_tls_factory()
+
+    def get_tls_factory(self):
+        """
+        If we have paths to a TLS certificate and key, check that we're ready
+        to actually use them:
+
+        * TLS-related imports worked
+        * cert and key are readable
+        * cert and key can be loaded
+
+        Then return a SSL contextFactory instance to use for the server.
+
+        :returns: SSL contextFactory for our server to use
+        :rtype: :py:class:`twisted.internet.ssl.CertificateOptions`
+        """
+        if not access(self.cert_path, R_OK):
+            raise RuntimeError('Error: cert file at %s is not '
+                               'readable' % self.cert_path)
+        if not access(self.key_path, R_OK):
+            raise RuntimeError('Error: key file at %s is not '
+                               'readable' % self.key_path)
+        if not HAVE_PYOPENSSL:
+            raise RuntimeError('Error: running with TLS (cert and key) requires'
+                               ' pyOpenSSL, but it does not appear to be '
+                               'installed. Please "pip install pyOpenSSL".')
+        # check certs are readable
+        cf = certificateOptionsFromFiles(self.key_path, self.cert_path)
+        return cf
 
     def setup_signal_handlers(self):
         """
@@ -194,6 +248,17 @@ class VaultRedirector(object):
                        self.bind_port)
         self.reactor.listenTCP(self.bind_port, site)
 
+    def listentls(self, site):
+        """
+        Setup TLS listener for the Site; helper method for testing
+
+        :param site: Site to serve
+        :type site: :py:class:`~.VaultRedirectorSite`
+        """
+        logger.warning('Setting TCP TLS listener on port %d for HTTPS requests',
+                       self.bind_port)
+        self.reactor.listenSSL(self.bind_port, site, self.tls_factory)
+
     def add_update_loop(self):
         """
         Setup the LoopingCall to poll Consul every ``self.poll_interval``;
@@ -218,8 +283,11 @@ class VaultRedirector(object):
         logger.warning("Initial Vault active node: %s",
                        self.active_node_ip_port)
         site = Site(VaultRedirectorSite(self))
-        # setup our HTTP listener
-        self.listentcp(site)
+        # setup our HTTP(S) listener
+        if self.tls_factory is not None:
+            self.listentls(site)
+        else:
+            self.listentcp(site)
         # setup the update_active_node poll every POLL_INTERVAL seconds
         self.add_update_loop()
         logger.warning('Starting Twisted reactor (event loop)')

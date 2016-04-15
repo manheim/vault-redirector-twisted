@@ -117,10 +117,21 @@ class TestRunner(object):
             call().add_argument('-P', '--port', dest='bind_port',
                                 action='store', type=int, default=8080,
                                 help='Port number to listen on (default 8080)'),
-            call().add_argument('-c', '--checkid', dest='checkid',
+            call().add_argument('-C', '--checkid', dest='checkid',
                                 action='store', type=str,
                                 default='service:vault', help='Consul service '
                                 'CheckID for Vault (default: "service:vault"'),
+            call().add_argument('-c', '--cert-path', dest='cert_path', type=str,
+                                action='store', help='Path to PEM-encoded TLS '
+                                'certificate. If you need a certificate chain '
+                                'to verify trust, this file should be composed '
+                                'of the server certificate followed by one or '
+                                'more chain certificates. If specified, you '
+                                'must also specify -k|--key-path'),
+            call().add_argument('-k', '--key-path', dest='key_path', type=str,
+                                action='store', help='Path to PEM-encoded TLS '
+                                'private key. If specified, you must also '
+                                'specify -c|--cert-path'),
             call().add_argument('CONSUL_HOST_PORT', action='store', type=str,
                                 help='Consul address in host:port form'),
             call().parse_args(['foo:123']),
@@ -175,7 +186,7 @@ class TestRunner(object):
         assert res.bind_port == 1234
 
     def test_parse_args_checkid(self):
-        res = self.cls.parse_args(['-c', 'foo:bar', 'foo:123'])
+        res = self.cls.parse_args(['-C', 'foo:bar', 'foo:123'])
         assert res.checkid == 'foo:bar'
 
     def test_parse_args_no_options(self):
@@ -202,6 +213,29 @@ class TestRunner(object):
         assert 'ERROR: CONSUL_HOST_PORT must be in host:port or ip:port ' \
                'format' in err
 
+    def test_parse_args_cert_key(self):
+        res = self.cls.parse_args(
+            ['-c', '/cert/path', '-k', '/key/path', 'foo:123']
+        )
+        assert res.cert_path == '/cert/path'
+        assert res.key_path == '/key/path'
+
+    def test_parse_args_cert_no_key(self, capsys):
+        with pytest.raises(SystemExit) as excinfo:
+            self.cls.parse_args(['-c', '/cert/path', 'foo:123'])
+        assert excinfo.value.code == 1
+        out, err = capsys.readouterr()
+        assert 'ERROR: -k|--key-path and -c|--cert-path must be specified ' \
+               'together' in err
+
+    def test_parse_args_key_no_cert(self, capsys):
+        with pytest.raises(SystemExit) as excinfo:
+            self.cls.parse_args(['-k', '/key/path', 'foo:123'])
+        assert excinfo.value.code == 1
+        out, err = capsys.readouterr()
+        assert 'ERROR: -k|--key-path and -c|--cert-path must be specified ' \
+               'together' in err
+
     def test_console_entry_point(self):
         argv = ['/tmp/redirector/runner.py', 'foo:123']
         with patch.object(sys, 'argv', argv):
@@ -215,7 +249,7 @@ class TestRunner(object):
             call(
                 'foo:123', redir_to_https=False, redir_to_ip=False,
                 log_disable=False, poll_interval=5.0, bind_port=8080,
-                check_id='service:vault'
+                check_id='service:vault', key_path=None, cert_path=None
             ),
             call().run()
         ]
@@ -234,7 +268,7 @@ class TestRunner(object):
             call(
                 'foo:123', redir_to_https=True, redir_to_ip=False,
                 log_disable=False, poll_interval=5.0, bind_port=8080,
-                check_id='service:vault'
+                check_id='service:vault', key_path=None, cert_path=None
             ),
             call().run()
         ]
@@ -253,7 +287,7 @@ class TestRunner(object):
             call(
                 'foo:123', redir_to_https=False, redir_to_ip=True,
                 log_disable=False, poll_interval=5.0, bind_port=8080,
-                check_id='service:vault'
+                check_id='service:vault', key_path=None, cert_path=None
             ),
             call().run()
         ]
@@ -272,7 +306,7 @@ class TestRunner(object):
             call(
                 'foo:123', redir_to_https=False, redir_to_ip=False,
                 log_disable=False, poll_interval=12.345, bind_port=8080,
-                check_id='service:vault'
+                check_id='service:vault', key_path=None, cert_path=None
             ),
             call().run()
         ]
@@ -291,14 +325,14 @@ class TestRunner(object):
             call(
                 'foo:123', redir_to_https=False, redir_to_ip=False,
                 log_disable=False, poll_interval=5.0, bind_port=1234,
-                check_id='service:vault'
+                check_id='service:vault', key_path=None, cert_path=None
             ),
             call().run()
         ]
         assert mock_logger.mock_calls == []
 
     def test_console_entry_checkid(self):
-        argv = ['/tmp/redirector/runner.py', '-c', 'foo:bar', 'foo:123']
+        argv = ['/tmp/redirector/runner.py', '-C', 'foo:bar', 'foo:123']
         with patch.object(sys, 'argv', argv):
             with patch(
                     '%s.VaultRedirector' % pbm,
@@ -310,7 +344,7 @@ class TestRunner(object):
             call(
                 'foo:123', redir_to_https=False, redir_to_ip=False,
                 log_disable=False, poll_interval=5.0, bind_port=8080,
-                check_id='foo:bar'
+                check_id='foo:bar', key_path=None, cert_path=None
             ),
             call().run()
         ]
@@ -329,7 +363,32 @@ class TestRunner(object):
             call(
                 'foo:123', redir_to_https=False, redir_to_ip=False,
                 log_disable=True, poll_interval=5.0, bind_port=8080,
-                check_id='service:vault'
+                check_id='service:vault', key_path=None, cert_path=None
+            ),
+            call().run()
+        ]
+        assert mock_logger.mock_calls == []
+
+    def test_console_entry_point_tls(self):
+        argv = [
+            '/tmp/redirector/runner.py',
+            '-c', '/path/to/cert',
+            '-k', '/path/to/key',
+            'foo:123'
+        ]
+        with patch.object(sys, 'argv', argv):
+            with patch(
+                    '%s.VaultRedirector' % pbm,
+                    spec_set=VaultRedirector
+            ) as mock_redir, \
+                 patch('%s.logger' % pbm) as mock_logger:
+                self.cls.console_entry_point()
+        assert mock_redir.mock_calls == [
+            call(
+                'foo:123', redir_to_https=False, redir_to_ip=False,
+                log_disable=False, poll_interval=5.0, bind_port=8080,
+                check_id='service:vault',
+                key_path='/path/to/key', cert_path='/path/to/cert'
             ),
             call().run()
         ]
@@ -349,7 +408,7 @@ class TestRunner(object):
             call(
                 'foo:123', redir_to_https=False, redir_to_ip=False,
                 log_disable=False, poll_interval=5.0, bind_port=8080,
-                check_id='service:vault'
+                check_id='service:vault', key_path=None, cert_path=None
             ),
             call().run()
         ]
@@ -370,7 +429,7 @@ class TestRunner(object):
             call(
                 'foo:123', redir_to_https=False, redir_to_ip=False,
                 log_disable=False, poll_interval=5.0, bind_port=8080,
-                check_id='service:vault'
+                check_id='service:vault', key_path=None, cert_path=None
             ),
             call().run()
         ]

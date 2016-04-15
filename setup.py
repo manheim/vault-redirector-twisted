@@ -10,6 +10,10 @@ requires = [
     'twisted>=16.0.0'
 ]
 
+extras_require = {
+    'tls': ['pyOpenSSL', 'pem']
+}
+
 classifiers = [
     'Development Status :: 4 - Beta',
     'Environment :: Console',
@@ -48,6 +52,7 @@ setup(
     description='Python/Twisted application to redirect Hashicorp Vault client requests to the active node in a HA cluster',
     long_description=long_description,
     install_requires=requires,
+    extras_require=extras_require,
     keywords="hashicorp vault vaultproject",
     classifiers=classifiers
 )
