@@ -384,6 +384,18 @@ class TestVaultRedirector(object):
         assert self.cls.last_poll_time == '2015-01-10T12:13:14'
 
     @freeze_time('2015-01-10 12:13:14')
+    def test_update_active_node_same_log_disabled(self):
+        self.cls.log_enabled = False
+        self.cls.active_node_ip_port = 'a:b'
+        with patch('%s.get_active_node' % pb) as mock_get:
+            mock_get.return_value = 'a:b'
+            with patch('%s.logger' % pbm) as mock_logger:
+                self.cls.update_active_node()
+        assert self.cls.active_node_ip_port == 'a:b'
+        assert mock_logger.mock_calls == []
+        assert self.cls.last_poll_time == '2015-01-10T12:13:14'
+
+    @freeze_time('2015-01-10 12:13:14')
     def test_update_active_node_exception(self):
         self.cls.last_poll_time = 'foo'
 
@@ -415,6 +427,19 @@ class TestVaultRedirector(object):
             call.warning('Active vault node changed from %s to %s',
                          'a:b', 'c:d')
         ]
+        assert self.cls.active_node_ip_port == 'c:d'
+        assert self.cls.last_poll_time == '2015-01-10T12:13:14'
+
+    @freeze_time('2015-01-10 12:13:14')
+    def test_update_active_node_different_log_disabled(self):
+        self.cls.log_enabled = False
+        self.cls.active_node_ip_port = 'a:b'
+        with patch('%s.get_active_node' % pb) as mock_get:
+            mock_get.return_value = 'c:d'
+            with patch('%s.logger' % pbm) as mock_logger:
+                self.cls.update_active_node()
+        assert mock_get.mock_calls == [call()]
+        assert mock_logger.mock_calls == []
         assert self.cls.active_node_ip_port == 'c:d'
         assert self.cls.last_poll_time == '2015-01-10T12:13:14'
 
@@ -1020,6 +1045,7 @@ class TestVaultRedirectorAcceptance(object):
             cls_mocks['update_active_node'].side_effect = self.se_update_active
             # instantiate class
             self.cls = VaultRedirector('consul:1234', poll_interval=0.5)
+            self.cls.log_enabled = False
             # make sure active is None (starting state)
             assert self.cls.active_node_ip_port is None
             self.cls.bind_port = self.get_open_port()
