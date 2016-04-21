@@ -236,7 +236,8 @@ it will be a 503.
       "version": "0.1.0",
       "consul_host_port": "127.0.0.1:8500",
       "source": "https://github.com/manheim/vault-redirector-twisted",
-      "active_vault": "vault_hostname_or_ip:port"
+      "active_vault": "vault_hostname_or_ip:port",
+      "last_consul_poll": "YYYY-MM-DDTHH:MM:SS"
     }
 
 Logging and Debugging
