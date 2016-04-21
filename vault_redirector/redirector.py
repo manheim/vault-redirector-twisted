@@ -234,7 +234,7 @@ class VaultRedirector(object):
         if self.log_enabled and newnode != self.active_node_ip_port:
             logger.warning("Active vault node changed from %s to %s",
                            self.active_node_ip_port, newnode)
-            self.active_node_ip_port = newnode
+        self.active_node_ip_port = newnode
 
     def run_reactor(self):
         """Method to run the Twisted reactor; mock point for testing"""
