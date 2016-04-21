@@ -54,6 +54,7 @@ import subprocess
 import json
 import logging
 import socket
+from freezegun import freeze_time
 
 # https://code.google.com/p/mock/issues/detail?id=249
 # py>=3.4 should use unittest.mock not the mock package on pypi
@@ -89,6 +90,7 @@ class TestVaultRedirector(object):
         assert mock_logger.mock_calls == []
         assert mock_get_tls.mock_calls == []
         assert cls.active_node_ip_port is None
+        assert cls.last_poll_time is None
         assert cls.consul_host_port == 'consul:123'
         assert cls.redir_https is False
         assert cls.redir_ip is False
@@ -124,6 +126,7 @@ class TestVaultRedirector(object):
         ]
         assert mock_get_tls.mock_calls == []
         assert cls.active_node_ip_port is None
+        assert cls.last_poll_time is None
         assert cls.consul_host_port == 'consul:123'
         assert cls.redir_https is True
         assert cls.redir_ip is True
@@ -171,6 +174,7 @@ class TestVaultRedirector(object):
         assert mock_logger.mock_calls == []
         assert mock_get_tls.mock_calls == [call()]
         assert cls.active_node_ip_port is None
+        assert cls.last_poll_time is None
         assert cls.consul_host_port == 'consul:123'
         assert cls.redir_https is False
         assert cls.redir_ip is False
@@ -368,6 +372,7 @@ class TestVaultRedirector(object):
         ]
         assert res == '172.17.0.4:8200'
 
+    @freeze_time('2015-01-10 12:13:14')
     def test_update_active_node_same(self):
         self.cls.active_node_ip_port = 'a:b'
         with patch('%s.get_active_node' % pb) as mock_get:
@@ -376,8 +381,24 @@ class TestVaultRedirector(object):
                 self.cls.update_active_node()
         assert self.cls.active_node_ip_port == 'a:b'
         assert mock_logger.mock_calls == []
+        assert self.cls.last_poll_time == '2015-01-10T12:13:14'
 
+    @freeze_time('2015-01-10 12:13:14')
+    def test_update_active_node_same_log_disabled(self):
+        self.cls.log_enabled = False
+        self.cls.active_node_ip_port = 'a:b'
+        with patch('%s.get_active_node' % pb) as mock_get:
+            mock_get.return_value = 'a:b'
+            with patch('%s.logger' % pbm) as mock_logger:
+                self.cls.update_active_node()
+        assert self.cls.active_node_ip_port == 'a:b'
+        assert mock_logger.mock_calls == []
+        assert self.cls.last_poll_time == '2015-01-10T12:13:14'
+
+    @freeze_time('2015-01-10 12:13:14')
     def test_update_active_node_exception(self):
+        self.cls.last_poll_time = 'foo'
+
         def se_exc():
             raise RuntimeError('foo')
 
@@ -392,7 +413,9 @@ class TestVaultRedirector(object):
             call.warning('Active vault node changed from %s to %s',
                          'a:b', None)
         ]
+        assert self.cls.last_poll_time == 'foo'
 
+    @freeze_time('2015-01-10 12:13:14')
     def test_update_active_node_different(self):
         self.cls.active_node_ip_port = 'a:b'
         with patch('%s.get_active_node' % pb) as mock_get:
@@ -405,6 +428,20 @@ class TestVaultRedirector(object):
                          'a:b', 'c:d')
         ]
         assert self.cls.active_node_ip_port == 'c:d'
+        assert self.cls.last_poll_time == '2015-01-10T12:13:14'
+
+    @freeze_time('2015-01-10 12:13:14')
+    def test_update_active_node_different_log_disabled(self):
+        self.cls.log_enabled = False
+        self.cls.active_node_ip_port = 'a:b'
+        with patch('%s.get_active_node' % pb) as mock_get:
+            mock_get.return_value = 'c:d'
+            with patch('%s.logger' % pbm) as mock_logger:
+                self.cls.update_active_node()
+        assert mock_get.mock_calls == [call()]
+        assert mock_logger.mock_calls == []
+        assert self.cls.active_node_ip_port == 'c:d'
+        assert self.cls.last_poll_time == '2015-01-10T12:13:14'
 
     def test_listentcp(self):
         self.cls.reactor = Mock(spec_set=reactor)
@@ -566,6 +603,7 @@ class TestVaultRedirectorSite(object):
             self.empty_resp = b''
         self.mock_redir = Mock(spec_set=VaultRedirector)
         type(self.mock_redir).active_node_ip_port = 'mynode:1234'
+        type(self.mock_redir).last_poll_time = 'myPollTime'
         type(self.mock_redir).log_enabled = True
         type(self.mock_redir).consul_scheme = 'http'
         type(self.mock_redir).consul_host_port = 'consul:5678'
@@ -900,7 +938,8 @@ class TestVaultRedirectorSite(object):
             'source': _PROJECT_URL,
             'version': _VERSION,
             'consul_host_port': 'consul:5678',
-            'active_vault': 'mynode:1234'
+            'active_vault': 'mynode:1234',
+            'last_consul_poll': 'myPollTime'
         }
 
 
@@ -1006,6 +1045,7 @@ class TestVaultRedirectorAcceptance(object):
             cls_mocks['update_active_node'].side_effect = self.se_update_active
             # instantiate class
             self.cls = VaultRedirector('consul:1234', poll_interval=0.5)
+            self.cls.log_enabled = False
             # make sure active is None (starting state)
             assert self.cls.active_node_ip_port is None
             self.cls.bind_port = self.get_open_port()

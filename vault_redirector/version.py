@@ -36,5 +36,5 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 ################################################################################
 """
 
-_VERSION = '0.1.0'
+_VERSION = '0.1.1'
 _PROJECT_URL = 'https://github.com/manheim/vault-redirector-twisted'

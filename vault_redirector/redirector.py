@@ -41,6 +41,7 @@ import logging
 import signal
 import json
 from os import getpid, access, R_OK
+from datetime import datetime
 import requests
 from twisted.web import resource
 from twisted.web.server import Site
@@ -92,6 +93,7 @@ class VaultRedirector(object):
         :type cert_path: str
         """
         self.active_node_ip_port = None
+        self.last_poll_time = None
         self.consul_host_port = consul_host_port
         self.redir_https = redir_to_https
         self.consul_scheme = 'http'
@@ -221,6 +223,7 @@ class VaultRedirector(object):
         """
         try:
             newnode = self.get_active_node()
+            self.last_poll_time = datetime.now().isoformat()
         except Exception:
             logger.exception('Exception encountered when polling active node')
             # we have a choice here whether to keep serving the old active
@@ -231,7 +234,7 @@ class VaultRedirector(object):
         if self.log_enabled and newnode != self.active_node_ip_port:
             logger.warning("Active vault node changed from %s to %s",
                            self.active_node_ip_port, newnode)
-            self.active_node_ip_port = newnode
+        self.active_node_ip_port = newnode
 
     def run_reactor(self):
         """Method to run the Twisted reactor; mock point for testing"""
@@ -319,7 +322,8 @@ class VaultRedirectorSite(object):
             'source': _PROJECT_URL,
             'version': _VERSION,
             'consul_host_port': self.redirector.consul_host_port,
-            'active_vault': self.redirector.active_node_ip_port
+            'active_vault': self.redirector.active_node_ip_port,
+            'last_consul_poll': self.redirector.last_poll_time
         })
         return s
 
