@@ -199,18 +199,15 @@ class VaultRedirector(object):
         r = requests.get(url)
         # return the current leader address
         for node in r.json():
-            for check in node['Checks']:
-                if check['CheckID'] != self.check_id:
-                    continue
-                if check['Status'] != 'passing':
-                    continue
-                port = node['Service']['Port']
-                n = "%s:%d" % (node['Node']['Node'], port)
-                if self.redir_ip:
-                    n = "%s:%d" % (node['Node']['Address'], port)
-                if self.log_enabled:
-                    logger.info("Got active node as: %s", n)
-                return n
+            if 'active' not in node['Service']['Tags']:
+                continue
+            port = node['Service']['Port']
+            n = "%s:%d" % (node['Node']['Node'], port)
+            if self.redir_ip:
+                n = "%s:%d" % (node['Node']['Address'], port)
+            if self.log_enabled:
+                logger.info("Got active node as: %s", n)
+            return n
         if self.log_enabled:
             logger.critical('NO vault services found with health check passing')
         return None

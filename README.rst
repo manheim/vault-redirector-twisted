@@ -69,32 +69,15 @@ Requirements
 4. The `requests <https://pypi.python.org/pypi/requests>`_ package (will be installed automatically via ``pip``).
 5. If you wish to use TLS for incoming connections (highly recommended), the `pyOpenSSL <https://pypi.python.org/pypi/pyOpenSSL>`_ and `pem <https://pypi.python.org/pypi/pem>`_ packages. These can be automatically installed along with vault-redirector by using ``pip install vault-redirector[tls]``.
 6. `Consul <https://www.consul.io/>`_ running and configured with service checks for Vault (see below)
+7. Vault 0.6.0+
 
 Consul Service Checks
 ++++++++++++++++++++++
 
 In order to determine the active Vault instance, ``vault-redirector`` requires that Consul be running and monitoring the health of all Vault instances. Redirection can be to either the IP address or Consul node name running the active service.
 
-Here is example of the `Consul service definition <https://www.consul.io/docs/agent/services.html>`_ that we use (note we're running Vault with TLS); you can override the service name via command-line arguments:
-
-.. code-block:: json
-
-    {
-      "service":{
-        "name": "vault",
-        "tags": ["secrets"],
-        "port": 8200,
-        "check": {
-          "id": "api",
-          "name": "HTTPS API check on port 8200",
-          "http": "https://127.0.0.1:8200/v1/sys/health",
-          "interval": "5s",
-          "timeout" : "2s"
-        }
-      }
-    }
-
-**Please Note** that vault-redirector will use either the Consul node name or node address (IP) to redirect to; they should be set correctly to what clients will connect to.
+The current implementation in this package requires Vault 0.6.0+, which automatically
+registers its own service and health checks with Consul.
 
 Installation
 ------------

@@ -287,7 +287,7 @@ texinfo_documents = [
 
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {
-    'https://docs.python.org/': None,
+    'python': ('http://docs.python.org/2.7', None),
     'requests': ('http://docs.python-requests.org/en/master/', None),
     'twisted': ('https://twistedmatrix.com/documents/16.0.0/api/', None)
 }
@@ -303,6 +303,7 @@ linkcheck_ignore = [
     r'https?://.*readthedocs\.org.*',
     r'https?://pypi\.python\.org/.*',
     r'https?://testpypi\.python\.org/.*',
+    r'https?://docs\.python\.org.*'
 ]
 
 # exclude module docstrings - see http://stackoverflow.com/a/18031024/211734
