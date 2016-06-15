@@ -1,6 +1,17 @@
 Changelog
 =========
 
+0.2.0 (2016-06-15)
+------------------
+
+* Breaking change to how the active node is determined from Consul. Prior to
+  this version, we looked for a 'vault' service with a health check named
+  'service:vault' (configurable via the VaultRedirector class constructor,
+  or the ``-c | --checkid`` command line argument) that was passing. With
+  Vault 0.6.0's automatic registration of service and health checks in Consul,
+  this needs to change. The logic to find the active node now looks for a node
+  in Consul that has the 'vault' service and a tag of 'active'.
+
 0.1.1 (2016-04-21)
 ------------------
 

@@ -80,7 +80,7 @@ test_get_active_node = [
             'ModifyIndex': 7,
             'Port': 8200,
             'Service': 'vault',
-            'Tags': ['secrets']
+            'Tags': ['secrets', 'standby']
         }
     },
     {
@@ -168,7 +168,7 @@ test_get_active_node = [
             'ModifyIndex': 21,
             'Port': 8200,
             'Service': 'vault',
-            'Tags': ['secrets']
+            'Tags': ['secrets', 'active']
         }
     },
     {
@@ -212,7 +212,7 @@ test_get_active_node = [
             'ModifyIndex': 16,
             'Port': 8200,
             'Service': 'vault',
-            'Tags': ['secrets']
+            'Tags': ['secrets', 'standby']
         }
     },
     {
@@ -256,7 +256,7 @@ test_get_active_node = [
             'ModifyIndex': 23,
             'Port': 8200,
             'Service': 'vault',
-            'Tags': ['secrets']
+            'Tags': ['secrets', 'standby']
         }
     }
 ]
@@ -264,3 +264,4 @@ test_get_active_node = [
 # same as above, but no passing vault check
 test_get_active_node_none = deepcopy(test_get_active_node)
 test_get_active_node_none[2]['Checks'][1]['Status'] = 'warning'
+test_get_active_node_none[2]['Service']['Tags'] = []
