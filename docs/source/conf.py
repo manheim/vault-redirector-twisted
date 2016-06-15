@@ -303,6 +303,7 @@ linkcheck_ignore = [
     r'https?://.*readthedocs\.org.*',
     r'https?://pypi\.python\.org/.*',
     r'https?://testpypi\.python\.org/.*',
+    r'https?://docs\.python\.org.*'
 ]
 
 # exclude module docstrings - see http://stackoverflow.com/a/18031024/211734
