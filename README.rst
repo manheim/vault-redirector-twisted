@@ -1,3 +1,6 @@
+DEPRECATED: This repository is no longer used, and the vault cluster it supported no longer exists
+======================================================================================
+
 vault-redirector-twisted
 ========================
 
